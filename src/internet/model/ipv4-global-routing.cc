@@ -34,6 +34,8 @@
 #include "ipv4-global-routing.h"
 #include "global-route-manager.h"
 #include <iostream>
+// for flow level ecmp, added by shuai
+#include "ns3/node.h"
 
 NS_LOG_COMPONENT_DEFINE ("Ipv4GlobalRouting");
 
@@ -176,6 +178,8 @@ Ipv4GlobalRouting::GetTupleValue (const Ipv4Header &header, Ptr<const Packet> ip
 				tupleValue ^= (udpHeader.GetSourcePort ()<<16);
 				tupleValue ^= udpHeader.GetDestinationPort ();
 				tupleValue ^= seqh.GetPG();
+				// add random factors for UDP, added by shuai
+				tupleValue /= (m_ipv4->GetObject<Node>()->GetId() + 1);
 				break;
 			}
 		case TCP_PROT_NUMBER:
@@ -187,6 +191,8 @@ Ipv4GlobalRouting::GetTupleValue (const Ipv4Header &header, Ptr<const Packet> ip
 					tcpHeader.GetDestinationPort ());
 				tupleValue ^= (tcpHeader.GetSourcePort ()<<16);
 				tupleValue ^= tcpHeader.GetDestinationPort ();
+				// add random factors for TCP, added by shuai
+				tupleValue /= (m_ipv4->GetObject<Node>()->GetId() + 1);
 				break;
 			}
 		default:

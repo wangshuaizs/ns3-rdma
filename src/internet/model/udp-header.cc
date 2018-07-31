@@ -161,8 +161,9 @@ UdpHeader::Print (std::ostream &os) const
      << m_sourcePort << " > " << m_destinationPort
   ;
   */
-	//os << "u " << m_sourcePort << ">" << m_destinationPort;
-	os << "u " << m_destinationPort;
+  // add source port, added by shuai
+	os << "u " << m_sourcePort << ">" << m_destinationPort;
+	//os << "u " << m_destinationPort;
 }
 
 uint32_t 
