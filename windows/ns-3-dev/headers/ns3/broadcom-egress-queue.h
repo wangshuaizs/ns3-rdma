@@ -35,7 +35,9 @@ namespace ns3 {
 	class BEgressQueue : public Queue {
 	public:
 		static TypeId GetTypeId(void);
-		static const unsigned fCnt = 128; //max number of queues, 128 for NICs
+		//static const unsigned fCnt = 128; //max number of queues, 128 for NICs
+		// allow up to 512 flows, added by shuai
+		static const unsigned fCnt = 512; //max number of flows, 512 for NICs
 		static const unsigned qCnt = 8; //max number of queues, 8 for switches
 		BEgressQueue();
 		virtual ~BEgressQueue();

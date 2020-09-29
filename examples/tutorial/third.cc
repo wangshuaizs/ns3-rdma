@@ -50,6 +50,11 @@ ERROR_RATE_PER_LINK 0.0000
 #include <iostream>
 #include <fstream>
 #include <time.h> 
+#include <vector>
+#include <math.h>
+#include <algorithm> // std::move_backward
+#include <random> // std::default_random_engine
+#include <chrono> // std::chrono::system_clock
 #include "ns3/core-module.h"
 #include "ns3/qbb-helper.h"
 #include "ns3/point-to-point-helper.h"
@@ -69,7 +74,7 @@ NS_LOG_COMPONENT_DEFINE("GENERIC_SIMULATION");
 
 // app_start_time and app_stop_time is for server
 bool enable_qcn = true, use_dynamic_pfc_threshold = true, packet_level_ecmp = false, flow_level_ecmp = false;
-uint32_t packet_payload_size = 1000, l2_chunk_size = 0, l2_ack_interval = 0;
+uint32_t packet_payload_size = 1024, l2_chunk_size = 0, l2_ack_interval = 0;
 double pause_time = 5, simulator_stop_time = 3.01, app_start_time = 1.0, app_stop_time = 9.0;
 std::string data_rate, link_delay, topology_file, flow_file, tcp_flow_file, trace_file, trace_output_file;
 
@@ -84,23 +89,87 @@ NodeContainer n;
 #define port_num 4000
 bool used_port[SERVER_NUM][port_num] = { false };  //第1维为pow(kkk,nnn),第2维至少为nnn*nnn*(kkk-1)
 int pkt_num = 10000; //max = "4294967295";
-
-#undef SCATTER_GATHER
+vector<int> layer_paras = { 7168, 147712, 295424, 590336, 1180672, 2360320, 2360320, 2360320, 4720640, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 411058176, 67125248, 16404388 };
+vector<vector<vector<int>>> recv_send_para_order;
+vector<vector<vector<int>>> recv_send_index_order;
+vector<int> ready_patitions(SERVER_NUM);
 
 std::string pcap_file = "mix/rdma_one_switch_one2one_pcap";
 std::string FLOW_PATH = "mix/rdma_one_switch_one2one_flow.txt";
 std::string TOPO_PATH = "mix/one_switch-topology.txt";
 std::string TRACE_PATH = "mix/rdma_one_switch_one2one_trace.txt";
+std::string order_filepath = "mix/order_file.txt";
 std::string MIX_PATH = "mix/rdma_one_switch_one2one_mix.tr";
 int one_switch_topology_generate(string path, int k);
 int one2one_traffic(string path, int server_num);
 int tracetraffice(string path, int server_num);
 
+uint8_t flag10010 = 0, flag100 = 0, flag10 = 0;
+
+void
+stream2parameter(Ptr<UdpServer> sink, uint32_t src, uint32_t dst)
+{
+	if (sink->GetReceived() > 10010 && flag10010 == 0) {
+		std::cout << "sink->GetReceived() > 10010\n";
+		flag10010 = 1;
+	}
+	else if (sink->GetReceived() > 100 && flag100 == 0) {
+		std::cout << "sink->GetReceived() > 100\n";
+		flag100 = 1;
+	}
+	else if (sink->GetReceived() > 10 && flag10 == 0) {
+		std::cout << "sink->GetReceived() > 10\n";
+		flag10 = 1;
+	}
+	//Simulator::Schedule(MicroSeconds(1.0), &stream2parameter, sink, src, dst);
+}
+
+void generate_random_send_order(void)
+{
+	ofstream orderfile;
+	orderfile.open(order_filepath);
+	vector<float> partioned_layer_paras;
+	vector<int> indexs;
+	int para_count = 0;
+	for (auto& it : layer_paras) {
+		partioned_layer_paras.push_back(it / SERVER_NUM);
+		indexs.push_back(para_count++);
+	}
+
+	recv_send_para_order.resize(SERVER_NUM);  // n senders
+	recv_send_index_order.resize(SERVER_NUM);
+	for (int i = 0; i < SERVER_NUM; i++) {
+		recv_send_para_order[i].resize(SERVER_NUM); // n receivers
+		recv_send_index_order[i].resize(SERVER_NUM);
+		for (int j = 0; j < SERVER_NUM; j++) {
+			//recv_send_para_order[i][j].resize(partioned_layer_paras.size()); // m layers
+			unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+			shuffle(indexs.begin(), indexs.end(), std::default_random_engine(seed));
+
+			int bytes = 0;
+			for (auto& it : indexs) {
+				bytes += partioned_layer_paras[it];
+				recv_send_para_order[i][j].push_back(ceil(bytes*1.0 / packet_payload_size));
+				recv_send_index_order[i][j].push_back(it);
+			}
+			for (auto& it : recv_send_index_order[i][j]) {
+				orderfile << it << " ";
+			}
+			orderfile << "\n";
+			for (auto& it : recv_send_para_order[i][j]) {
+				orderfile << it << " ";
+			}
+			orderfile << "\n\n";
+		}
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	one_switch_topology_generate(TOPO_PATH, SERVER_NUM);
 	one2one_traffic(FLOW_PATH, SERVER_NUM);
-	tracetraffice(TRACE_PATH, SERVER_NUM + 1);
+	tracetraffice(TRACE_PATH, SERVER_NUM);
+	generate_random_send_order();
 
 	topology_file = TOPO_PATH;
 	flow_file = FLOW_PATH;
@@ -109,7 +178,6 @@ int main(int argc, char *argv[])
 	app_start_time = 0.99;
 	app_stop_time = 8.01;
 	simulator_stop_time = 10.0;
-	packet_payload_size = 1000;
 	send_in_chunks = 0;
 	enable_qcn = 0;
 	use_dynamic_pfc_threshold = 1;
@@ -343,36 +411,22 @@ int main(int argc, char *argv[])
 		Ptr<Ipv4> ipv4 = n.Get(dst)->GetObject<Ipv4>();
 		Ipv4Address serverAddress = ipv4->GetAddress(1, 0).GetLocal(); //GetAddress(0,0) is the loopback 127.0.0.1
 
-		if (send_in_chunks)
-		{
-			UdpEchoServerHelper server0(port, pg); //Add Priority
-			ApplicationContainer apps0s = server0.Install(n.Get(dst));
+		WorkerHelper server0(port);
+		//UdpServerHelper server0(port);
+		ApplicationContainer apps0s = server0.Install(n.Get(dst));
 
-			UdpEchoClientHelper client0(serverAddress, port, pg); //Add Priority
-			client0.SetAttribute("MaxPackets", UintegerValue(maxPacketCount));
-			client0.SetAttribute("Interval", TimeValue(interPacketInterval));
-			client0.SetAttribute("PacketSize", UintegerValue(packetSize));
-			ApplicationContainer apps0c = client0.Install(n.Get(src));
+		PSHelper client0(serverAddress, port, pg); //Add Priority
+		//UdpClientHelper client0(serverAddress, port, pg); //Add Priority
+		client0.SetAttribute("MaxPackets", UintegerValue(maxPacketCount));
+		client0.SetAttribute("Interval", TimeValue(interPacketInterval));
+		client0.SetAttribute("PacketSize", UintegerValue(packetSize));
+		ApplicationContainer apps0c = client0.Install(n.Get(src));
 
-			apps0s.Start(Seconds(app_start_time));
-			//apps0s.Stop(Seconds(app_stop_time));
-			apps0c.Start(Seconds(start_time));
-			//apps0c.Stop(Seconds(stop_time));
-		}
-		else
-		{
-			UdpServerHelper server0(port);
-			ApplicationContainer apps0s = server0.Install(n.Get(dst));
+		apps0s.Start(Seconds(app_start_time));
+		apps0c.Start(Seconds(start_time));
 
-			UdpClientHelper client0(serverAddress, port, pg); //Add Priority
-			client0.SetAttribute("MaxPackets", UintegerValue(maxPacketCount));
-			client0.SetAttribute("Interval", TimeValue(interPacketInterval));
-			client0.SetAttribute("PacketSize", UintegerValue(packetSize));
-			ApplicationContainer apps0c = client0.Install(n.Get(src));
-
-			apps0s.Start(Seconds(app_start_time));
-			apps0c.Start(Seconds(start_time));
-		}
+		//Ptr<UdpServer> sink = server0.GetServer();
+		//Simulator::Schedule(Seconds(0.0), &stream2parameter, sink, src, dst);
 
 
 	}
@@ -410,7 +464,7 @@ int main(int argc, char *argv[])
 int one_switch_topology_generate(string path, int k)
 {
 	ofstream topofile;
-	string link_rate = "10Gbps";
+	string link_rate = "40Gbps";
 	string link_delay = "0.001ms";
 	string link_error_rate = "0";
 	int server_num = SERVER_NUM;
@@ -461,7 +515,7 @@ int one2one_traffic(string path, int server_num)
 
 	flowfile.open(path);
 	// output first line, flow #
-	flowfile << 2*flow_num << endl;
+	flowfile << 2 * flow_num << endl;
 	for (int i = 0; i < server_num; i++)
 		for (int j = 0; j < server_num; j++)
 			if (i != j) {
@@ -488,10 +542,9 @@ int tracetraffice(string path, int server_num)
 	ofstream tracefile;
 
 	tracefile.open(path);
-	tracefile << 3 << endl;
-	tracefile << 0 << endl;
-	tracefile << 1 << endl;
-	tracefile << 2 << endl;
+	tracefile << server_num << endl;
+	for (int i = 0; i < server_num; i++)
+		tracefile << i << endl;
 
 	tracefile << "\n\nFirst line: tracing node #" << endl;
 	tracefile << "Node IDs..." << endl;

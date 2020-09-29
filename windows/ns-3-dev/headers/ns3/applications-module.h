@@ -29,4 +29,7 @@
 #include "udp-trace-client.h"
 #include "v4ping-helper.h"
 #include "v4ping.h"
+#include "ps.h"
+#include "worker.h"
+#include "ps-worker-helper.h"
 #endif
