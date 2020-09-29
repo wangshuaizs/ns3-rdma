@@ -266,10 +266,9 @@ namespace ns3 {
 		{
 			p = m_queue->DequeueNIC(m_paused);
 		}
-		else   //switch, doesn't care about qcn, just send
-		{
-			//p = m_queue->Dequeue(m_paused);		//this is strict priority
-			p = m_queue->DequeueRR(m_paused);		//this is round-robin
+		else {  //switch, doesn't care about qcn, just send
+			p = m_queue->Dequeue(m_paused);		//this is strict priority
+			//p = m_queue->DequeueRR(m_paused);		//this is round-robin
 		}
 		if (p != 0)
 		{
@@ -583,7 +582,7 @@ namespace ns3 {
 					Simulator::Cancel(m_resumeEvt[qIndex]);
 					m_resumeEvt[qIndex] = Simulator::Schedule(MicroSeconds(pauseh.GetTime()), &QbbNetDevice::PauseFinish, this, qIndex);
 					// count PFC frame, added by shuai
-					std::cout << std::setprecision(7) << Simulator::Now().GetSeconds() << "  " << m_node->GetId() << "  " << ipv4h.GetSource() << "  " << pauseh.GetQLen() << std::endl;
+					std::cout << "PFC pause frame " << std::setprecision(7) << Simulator::Now().GetSeconds() << "  " << m_node->GetId() << "  " << ipv4h.GetSource() << "  " << pauseh.GetQLen() << std::endl;
 				}
 				else
 				{

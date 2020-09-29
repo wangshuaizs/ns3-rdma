@@ -1,8 +1,55 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/*
+TOPOLOGY_FILE mix/fat-tree-topology.txt
+FLOW_FILE mix/flow.txt
+TCP_FLOW_FILE mix/flow_tcp_0.txt
+TRACE_FILE mix/trace.txt
+TRACE_OUTPUT_FILE mix/mix.tr
+
+APP_START_TIME 0.99
+APP_STOP_TIME 8.01
+SIMULATOR_STOP_TIME 10.0
+PACKET_PAYLOAD_SIZE 1024
+SEND_IN_CHUNKS 0
+
+USE_DYNAMIC_PFC_THRESHOLD 1
+PAUSE_TIME 5
+
+PACKET_LEVEL_ECMP 1
+FLOW_LEVEL_ECMP 0
+
+ENABLE_QCN 1
+
+KMAX 100000
+KMIN 5000
+PMAX 0.1
+
+NP_SAMPLING_INTERVAL 0
+CNP_INTERVAL 50
+
+CLAMP_TARGET_RATE 1
+CLAMP_TARGET_RATE_AFTER_TIMER 0
+DCTCP_GAIN 0.00390625
+ALPHA_RESUME_INTERVAL 55
+RP_TIMER 60
+BYTE_COUNTER 300000000
+FAST_RECOVERY_TIMES 5
+
+RATE_AI 40Mb/s
+RATE_HAI 200Mb/s
+
+L2_WAIT_FOR_ACK 0
+L2_ACK_INTERVAL 256
+L2_CHUNK_SIZE 4000
+L2_BACK_TO_ZERO 0
+
+ERROR_RATE_PER_LINK 0.0000
+*/
+
+
 #include <iostream>
 #include <fstream>
 #include <time.h> 
-#include <math.h>
 #include "ns3/core-module.h"
 #include "ns3/qbb-helper.h"
 #include "ns3/point-to-point-helper.h"
@@ -24,63 +71,47 @@ NS_LOG_COMPONENT_DEFINE("GENERIC_SIMULATION");
 bool enable_qcn = true, use_dynamic_pfc_threshold = true, packet_level_ecmp = false, flow_level_ecmp = false;
 uint32_t packet_payload_size = 1000, l2_chunk_size = 0, l2_ack_interval = 0;
 double pause_time = 5, simulator_stop_time = 3.01, app_start_time = 1.0, app_stop_time = 9.0;
-std::string data_rate, link_delay, topology_file, flow_file, trace_file, trace_output_file;
+std::string data_rate, link_delay, topology_file, flow_file, tcp_flow_file, trace_file, trace_output_file;
 
-double cnp_interval = 50, alpha_resume_interval = 55, rp_timer, dctcp_gain = 1 / 256, np_sampling_interval = 0, pmax = 1;
+double cnp_interval = 50, alpha_resume_interval = 55, rp_timer, dctcp_gain = 1 / 16, np_sampling_interval = 0, pmax = 1;
 uint32_t byte_counter, fast_recovery_times = 5, kmax = 60, kmin = 60;
 std::string rate_ai, rate_hai;
 
 bool clamp_target_rate = false, clamp_target_rate_after_timer = false, send_in_chunks = true, l2_wait_for_ack = false, l2_back_to_zero = false, l2_test_read = false;
 double error_rate_per_link = 0.0;
-
 NodeContainer n;
+#define SERVER_NUM 3
 #define port_num 4000
-bool used_port[100][port_num] = { false };
-int pkt_num = 50 * 1000; // 50MBytes
+bool used_port[SERVER_NUM][port_num] = { false };  //第1维为pow(kkk,nnn),第2维至少为nnn*nnn*(kkk-1)
+int pkt_num = 10000; //max = "4294967295";
 
-#define FLOW_PATH         "mix/flow_fairness_flow.txt"
-#define TOPO_PATH         "mix/topology.txt"
-#define TRACE_PATH        "mix/flow_fairness_trace.txt"
-#define TRACE_OUT_PATH    "mix/flow_fairness_mix.tr"
-int topology_generate(string path);
-int traffic(string path);
-int trace_traffic(string path);
+#undef SCATTER_GATHER
 
-ofstream topofile;
-string topo_link_rate = "40Gbps";
-string topo_link_delay = "0.001ms";
-string topo_link_error_rate = "0";
-ofstream flowfile;
-string flow_priority = "3";
-string flow_start_time = "1.0";
-string flow_end_time = "5.0";
-
-Ptr<Ipv4StaticRouting> GetNodeStaticRoutingProtocol(Ptr<Node> node)
-{
-	Ptr<Ipv4> nodeIpv4 = node->GetObject<Ipv4>();
-	Ptr<Ipv4RoutingProtocol> routingProtocol = nodeIpv4->GetRoutingProtocol();
-	Ptr<Ipv4ListRouting> listRouting = DynamicCast<Ipv4ListRouting>(routingProtocol);
-	int16_t priority;
-	Ptr<Ipv4StaticRouting> routing = DynamicCast<Ipv4StaticRouting>(listRouting->GetRoutingProtocol(0, priority));
-	return routing;
-}
+std::string pcap_file = "mix/rdma_one_switch_one2one_pcap";
+std::string FLOW_PATH = "mix/rdma_one_switch_one2one_flow.txt";
+std::string TOPO_PATH = "mix/one_switch-topology.txt";
+std::string TRACE_PATH = "mix/rdma_one_switch_one2one_trace.txt";
+std::string MIX_PATH = "mix/rdma_one_switch_one2one_mix.tr";
+int one_switch_topology_generate(string path, int k);
+int one2one_traffic(string path, int server_num);
+int tracetraffice(string path, int server_num);
 
 int main(int argc, char *argv[])
 {
-	topology_generate(TOPO_PATH);
-	traffic(FLOW_PATH);
-	trace_traffic(TRACE_PATH);
+	one_switch_topology_generate(TOPO_PATH, SERVER_NUM);
+	one2one_traffic(FLOW_PATH, SERVER_NUM);
+	tracetraffice(TRACE_PATH, SERVER_NUM + 1);
 
 	topology_file = TOPO_PATH;
 	flow_file = FLOW_PATH;
 	trace_file = TRACE_PATH;
-	trace_output_file = TRACE_OUT_PATH;
+	trace_output_file = MIX_PATH;
 	app_start_time = 0.99;
 	app_stop_time = 8.01;
 	simulator_stop_time = 10.0;
 	packet_payload_size = 1000;
 	send_in_chunks = 0;
-	enable_qcn = 1;
+	enable_qcn = 0;
 	use_dynamic_pfc_threshold = 1;
 	packet_level_ecmp = 0;
 	flow_level_ecmp = 1;
@@ -95,10 +126,10 @@ int main(int argc, char *argv[])
 	cnp_interval = 50;
 	alpha_resume_interval = 55;
 	rp_timer = 60;
-	byte_counter = 10000000;
-	kmax = 1000;
-	kmin = 40;
-	pmax = 0.01;
+	byte_counter = 300000000;
+	kmax = 100000;
+	kmin = 5000;
+	pmax = 0.1;
 	dctcp_gain = 0.00390625;
 	fast_recovery_times = 5;
 	rate_ai = "40Mb/s";
@@ -204,9 +235,9 @@ int main(int argc, char *argv[])
 	clock_t begint, endt;
 	begint = clock();
 
-	SeedManager::SetSeed(time(NULL));
+	//SeedManager::SetSeed(time(NULL));
 
-	std::ifstream topof, flowf, tracef;
+	std::ifstream topof, flowf, tracef, tcpflowf;
 	topof.open(topology_file.c_str());
 	flowf.open(flow_file.c_str());
 	tracef.open(trace_file.c_str());
@@ -224,15 +255,19 @@ int main(int argc, char *argv[])
 		n.Get(sid)->SetNodeType(1, dynamicth); //broadcom switch
 		n.Get(sid)->m_broadcom->SetMarkingThreshold(kmin, kmax, pmax);
 	}
+
+
 	NS_LOG_INFO("Create nodes.");
 
 	InternetStackHelper internet;
 	internet.Install(n);
+
 	NS_LOG_INFO("Create channels.");
 
 	//
 	// Explicitly create the channels required by the topology.
 	//
+
 	Ptr<RateErrorModel> rem = CreateObject<RateErrorModel>();
 	Ptr<UniformRandomVariable> uv = CreateObject<UniformRandomVariable>();
 	rem->SetRandomVariable(uv);
@@ -286,23 +321,7 @@ int main(int argc, char *argv[])
 	}
 	AsciiTraceHelper ascii;
 	qbb.EnableAscii(ascii.CreateFileStream(trace_output_file), trace_nodes);
-
-	Ptr<Ipv4StaticRouting> routing;
-	routing = GetNodeStaticRoutingProtocol(n.Get(5));
-	routing->AddHostRouteTo(Ipv4Address("10.1.14.2"), Ipv4Address("10.1.6.2"), 6);
-	routing->AddHostRouteTo(Ipv4Address("10.1.15.2"), Ipv4Address("10.1.6.2"), 6);
-	routing->AddHostRouteTo(Ipv4Address("10.1.16.2"), Ipv4Address("10.1.7.2"), 7);
-	routing->AddHostRouteTo(Ipv4Address("10.1.17.2"), Ipv4Address("10.1.7.2"), 7);
-	routing->AddHostRouteTo(Ipv4Address("10.1.18.2"), Ipv4Address("10.1.7.2"), 7);
-
-	routing = GetNodeStaticRoutingProtocol(n.Get(6));
-	routing->AddHostRouteTo(Ipv4Address("10.1.14.2"), Ipv4Address("10.1.8.2"), 2);
-	routing->AddHostRouteTo(Ipv4Address("10.1.15.2"), Ipv4Address("10.1.8.2"), 2);
-
-	routing = GetNodeStaticRoutingProtocol(n.Get(7));
-	routing->AddHostRouteTo(Ipv4Address("10.1.16.2"), Ipv4Address("10.1.10.2"), 2);
-	routing->AddHostRouteTo(Ipv4Address("10.1.17.2"), Ipv4Address("10.1.11.2"), 3);
-	routing->AddHostRouteTo(Ipv4Address("10.1.18.2"), Ipv4Address("10.1.11.2"), 3);
+	qbb.EnablePcap(pcap_file, trace_nodes, true);
 
 	Ipv4GlobalRoutingHelper::PopulateRoutingTables();
 	std::cout << "Routing complete.\n";
@@ -324,17 +343,38 @@ int main(int argc, char *argv[])
 		Ptr<Ipv4> ipv4 = n.Get(dst)->GetObject<Ipv4>();
 		Ipv4Address serverAddress = ipv4->GetAddress(1, 0).GetLocal(); //GetAddress(0,0) is the loopback 127.0.0.1
 
-		UdpServerHelper server0(port);
-		ApplicationContainer apps0s = server0.Install(n.Get(dst));
+		if (send_in_chunks)
+		{
+			UdpEchoServerHelper server0(port, pg); //Add Priority
+			ApplicationContainer apps0s = server0.Install(n.Get(dst));
 
-		UdpClientHelper client0(serverAddress, port, pg); //Add Priority
-		client0.SetAttribute("MaxPackets", UintegerValue(maxPacketCount));
-		client0.SetAttribute("Interval", TimeValue(interPacketInterval));
-		client0.SetAttribute("PacketSize", UintegerValue(packetSize));
-		ApplicationContainer apps0c = client0.Install(n.Get(src));
+			UdpEchoClientHelper client0(serverAddress, port, pg); //Add Priority
+			client0.SetAttribute("MaxPackets", UintegerValue(maxPacketCount));
+			client0.SetAttribute("Interval", TimeValue(interPacketInterval));
+			client0.SetAttribute("PacketSize", UintegerValue(packetSize));
+			ApplicationContainer apps0c = client0.Install(n.Get(src));
 
-		apps0s.Start(Seconds(app_start_time));
-		apps0c.Start(Seconds(start_time));
+			apps0s.Start(Seconds(app_start_time));
+			//apps0s.Stop(Seconds(app_stop_time));
+			apps0c.Start(Seconds(start_time));
+			//apps0c.Stop(Seconds(stop_time));
+		}
+		else
+		{
+			UdpServerHelper server0(port);
+			ApplicationContainer apps0s = server0.Install(n.Get(dst));
+
+			UdpClientHelper client0(serverAddress, port, pg); //Add Priority
+			client0.SetAttribute("MaxPackets", UintegerValue(maxPacketCount));
+			client0.SetAttribute("Interval", TimeValue(interPacketInterval));
+			client0.SetAttribute("PacketSize", UintegerValue(packetSize));
+			ApplicationContainer apps0c = client0.Install(n.Get(src));
+
+			apps0s.Start(Seconds(app_start_time));
+			apps0c.Start(Seconds(start_time));
+		}
+
+
 	}
 
 	std::cout << "Generate traffic complete.\n";
@@ -357,57 +397,81 @@ int main(int argc, char *argv[])
 
 	endt = clock();
 	std::cout << (double)(endt - begint) / CLOCKS_PER_SEC << " s\n";
+
+	std::ofstream endfile;
+	endfile.open("end.txt");
+	endfile << (double)(endt - begint) / CLOCKS_PER_SEC << " s\n";
+	endfile.close();
+
+	char pause;
+	cin >> pause;
 }
 
-int topology_generate(string path)
+int one_switch_topology_generate(string path, int k)
 {
+	ofstream topofile;
+	string link_rate = "10Gbps";
+	string link_delay = "0.001ms";
+	string link_error_rate = "0";
+	int server_num = SERVER_NUM;
+	int switch_num = 1;
+	int total_node_num = server_num + switch_num;
+	int link_num = server_num;
+
 	topofile.open(path);
 	// output first line, total node #, switch node #, link #
-	topofile << 16 << " " << 6 << " " << 18 << endl;
-	topofile << "5 6 7 8 9 10" << endl;
-	// output links, src0 dst0 rate delay error_rate
-	topofile << 0 << " " << 5 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
-	topofile << 1 << " " << 5 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
-	topofile << 2 << " " << 5 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
-	topofile << 3 << " " << 5 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
-	topofile << 4 << " " << 5 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
-	topofile << 5 << " " << 6 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
-	topofile << 5 << " " << 7 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
-	topofile << 6 << " " << 8 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
-	topofile << 6 << " " << 9 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
-	topofile << 7 << " " << 8 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
-	topofile << 7 << " " << 9 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
-	topofile << 8 << " " << 10 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
-	topofile << 9 << " " << 10 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
-	topofile << 10 << " " << 11 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
-	topofile << 10 << " " << 12 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
-	topofile << 10 << " " << 13 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
-	topofile << 10 << " " << 14 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
-	topofile << 10 << " " << 15 << " " << topo_link_rate << " " << topo_link_delay << " " << topo_link_error_rate << endl;
+	topofile << total_node_num << " " << switch_num << " " << link_num << endl;
+	// output seconde line, switch node IDs 
+	for (int i = 0; i<switch_num; i++)
+	{
+		topofile << server_num + i << " ";
+	}
+	topofile << endl;
+	// output server to edge switch links, src0 dst0 rate delay error_rate
+	for (int i = 0; i < server_num; i++)
+	{
+		topofile << i << " " << server_num << " " << link_rate << " " << link_delay << " " << link_error_rate << endl;
+	}
 	// print description
 	topofile << "\n\n";
 	topofile << "First line : total node #, switch node #, link #" << endl;
+	topofile << "Second line : switch node IDs..." << endl;
 	topofile << "src0 dst0 rate delay error_rate" << endl;
 	topofile << "src1 dst1 rate delay error_rate" << endl;
 	topofile << "..." << endl;
+	topofile << endl;
+	topofile << "0 - " << server_num - 1 << " Servers" << endl;
+	topofile << server_num << " - " << (server_num + k * k / 2 - 1) << " Edge switches" << endl;
+	topofile << (server_num + k * k / 2) << " - " << (server_num + k * k - 1) << " Aggregation switches" << endl;
+	topofile << (server_num + k * k) << " - " << (server_num + k * k + (k * k / 4) - 1) << " Core switches" << endl;
 	// close file
 	topofile.close();
 
 	return 0;
 }
 
-int traffic(string path)
+int one2one_traffic(string path, int server_num)
 {
+	ofstream flowfile;
+	int flow_num = server_num * (server_num - 1);
+	string priority = "3";
+	int packet_num = pkt_num; //max = "4294967295";
+	string start_time = "1.0";
+	string end_time = "5.0";
+
 	flowfile.open(path);
 	// output first line, flow #
-	flowfile << 5 << endl;
+	flowfile << 2*flow_num << endl;
+	for (int i = 0; i < server_num; i++)
+		for (int j = 0; j < server_num; j++)
+			if (i != j) {
+				flowfile << i << " " << j << " " << "3" << " " << packet_num << " " << start_time << " " << end_time << std::endl;
+				flowfile << i << " " << j << " " << "4" << " " << packet_num << " " << start_time << " " << end_time << std::endl;
+			}
+	//flowfile << 2 << endl;
 	// output the rest line, src dst priority packet# start_time end_time
-	flowfile << 0 << " " << 11 << " " << flow_priority << " " << pkt_num << " " << flow_start_time << " " << flow_end_time << endl;
-	flowfile << 1 << " " << 12 << " " << flow_priority << " " << pkt_num << " " << flow_start_time << " " << flow_end_time << endl;
-	flowfile << 2 << " " << 13 << " " << flow_priority << " " << pkt_num << " " << flow_start_time << " " << flow_end_time << endl;
-	flowfile << 3 << " " << 14 << " " << flow_priority << " " << pkt_num << " " << flow_start_time << " " << flow_end_time << endl;
-	flowfile << 4 << " " << 15 << " " << flow_priority << " " << pkt_num << " " << flow_start_time << " " << flow_end_time << endl;
-
+	//flowfile << 1 << " " << 0 << " " << priority << " " << packet_num << " " << start_time << " " << end_time << endl;
+	//flowfile << 1 << " " << 0 << " " << "4" << " " << packet_num << " " << start_time << " " << end_time << endl;
 	// print description
 	flowfile << "\n\n";
 	flowfile << "First line : flow#" << endl;
@@ -419,16 +483,15 @@ int traffic(string path)
 	return 0;
 }
 
-int trace_traffic(string path)
+int tracetraffice(string path, int server_num)
 {
 	ofstream tracefile;
 
 	tracefile.open(path);
-	tracefile << 16 << endl;
-	for (int j = 0; j < 16; j++)
-	{
-		tracefile << j << endl;
-	}
+	tracefile << 3 << endl;
+	tracefile << 0 << endl;
+	tracefile << 1 << endl;
+	tracefile << 2 << endl;
 
 	tracefile << "\n\nFirst line: tracing node #" << endl;
 	tracefile << "Node IDs..." << endl;

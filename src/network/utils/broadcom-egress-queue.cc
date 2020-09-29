@@ -123,6 +123,7 @@ namespace ns3 {
 			m_rrlast = qIndex;
 			NS_LOG_LOGIC("Popped " << p);
 			NS_LOG_LOGIC("Number bytes " << m_bytesInQueueTotal);
+			m_qlast = qIndex;
 			return p;
 		}
 		NS_LOG_LOGIC("Nothing can be sent");
@@ -139,17 +140,30 @@ namespace ns3 {
 			NS_LOG_LOGIC("Queue empty");
 			return 0;
 		}
+		// bool found = false;
+		// uint32_t qIndex;
+		// for (qIndex = 1; qIndex <= qCnt; qIndex++)  //round robin
+		// {
+		// 	if (!paused[(qIndex + m_rrlast) % qCnt] && m_queues[(qIndex + m_rrlast) % qCnt]->GetNPackets() > 0)
+		// 	{
+		// 		found = true;
+		// 		break;
+		// 	}
+		// }
+		// qIndex = (qIndex + m_rrlast) % qCnt;
+
+		//strict priority
 		bool found = false;
 		uint32_t qIndex;
-		for (qIndex = 1; qIndex <= qCnt; qIndex++)  //round robin
+		for (qIndex = 1; qIndex <= qCnt; qIndex++)
 		{
-			if (!paused[(qIndex + m_rrlast) % qCnt] && m_queues[(qIndex + m_rrlast) % qCnt]->GetNPackets() > 0)
+			if (!paused[(qCnt - qIndex) % qCnt] && m_queues[(qCnt - qIndex) % qCnt]->GetNPackets() > 0)
 			{
 				found = true;
 				break;
 			}
 		}
-		qIndex = (qIndex + m_rrlast) % qCnt;
+		qIndex = (qCnt - qIndex) % qCnt;
 		if (found)
 		{
 			Ptr<Packet> p = m_queues[qIndex]->Dequeue();
