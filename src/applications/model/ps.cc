@@ -166,10 +166,10 @@ PS::GetParameters (void)
   tmp_addr = (uint32_t*) m_index_order_address;
   m_index_order = (uint32_t*)tmp_addr + (m_num_layers+1)*(m_pg+8*(m_ps_id+m_num_servers*m_worker_id)) + 1;
 
-  std::cout << m_ps_id << " " << m_worker_id << " " << m_pg << "\n";
-  for (int k = 0; k < m_num_layers; k++) 
+  std::cout << m_worker_id << " " << m_ps_id << " " << m_pg << "\n";
+  /*for (int k = 0; k < m_num_layers; k++) 
     std::cout << m_parameter_sizes[k] << " ";
-  std::cout << "\n";
+  std::cout << "\n";*/
   for (int k = 0; k < m_num_layers; k++) 
     std::cout << m_index_order[k] << " ";
   std::cout << "\n";

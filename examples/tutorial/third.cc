@@ -88,6 +88,8 @@ NodeContainer n;
 #define SERVER_NUM 3
 #define LARYER_NUM 19
 #define PRIORITY_NUM 8
+#define USED_PRIORITY_NUM 2
+#define USED_HIGHEST_PRIORITY 3
 #define port_num 4000
 bool used_port[SERVER_NUM][port_num] = { false };  //��1άΪpow(kkk,nnn),��2ά����Ϊnnn*nnn*(kkk-1)
 int pkt_num = 133809; //max = "4294967295";
@@ -96,6 +98,7 @@ uint32_t para_sizes[LARYER_NUM];
 uint32_t global_recv_send_index_order[SERVER_NUM][SERVER_NUM][LARYER_NUM]; // recv/sender/para
 uint32_t recv_send_index_order[SERVER_NUM][SERVER_NUM][PRIORITY_NUM][LARYER_NUM+1]; // recv/sender/pg/para
 vector<uint32_t> ready_patitions(SERVER_NUM);
+uint32_t priority_thresholds[SERVER_NUM][USED_PRIORITY_NUM - 1];
 
 std::string pcap_file = "mix/rdma_one_switch_one2one_pcap";
 std::string FLOW_PATH = "mix/rdma_one_switch_one2one_flow.txt";
@@ -139,6 +142,9 @@ void generate_random_send_order(void)
 		indexs.push_back(para_count++);
 	}
 
+	for (int i = 0; i < SERVER_NUM; i++)
+		for (int j = 0; j < USED_PRIORITY_NUM - 1; j++)
+			priority_thresholds[i][j] = 3*(i+1);
 	for (int i = 0; i < SERVER_NUM; i++) {
 		for (int j = 0; j < SERVER_NUM; j++) {
 			unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
@@ -152,19 +158,30 @@ void generate_random_send_order(void)
 			for (int kk = 0; kk < LARYER_NUM; kk++) {
 				std::cout << global_recv_send_index_order[i][j][kk] << " ";
 			}
-			std::cout << "\n\n";
+			std::cout << "\n";
 
-			// TODO: split among differnet priorities
-			for (int kk = 0; kk < LARYER_NUM+1; kk++) {
-				if (kk == 0)
-					recv_send_index_order[i][j][2][kk] = LARYER_NUM;
-				else
-					recv_send_index_order[i][j][2][kk] = global_recv_send_index_order[i][j][kk-1];
+			recv_send_index_order[i][j][USED_HIGHEST_PRIORITY][0] = priority_thresholds[j][0] + 1;
+			for (int prio_i = 1; prio_i < USED_PRIORITY_NUM-1; prio_i++) {
+				recv_send_index_order[i][j][USED_HIGHEST_PRIORITY-prio_i][0] = priority_thresholds[j][prio_i] - priority_thresholds[j][prio_i-1];
 			}
-			for (int kk = 0; kk < LARYER_NUM+1; kk++) {
-				orderfile << recv_send_index_order[i][j][2][kk] << " ";
+			recv_send_index_order[i][j][USED_HIGHEST_PRIORITY- USED_PRIORITY_NUM+1][0] = LARYER_NUM - priority_thresholds[j][USED_PRIORITY_NUM - 2] - 1;
+
+			for (int prio_i = 0; prio_i < USED_PRIORITY_NUM; prio_i++) {
+				uint32_t start_from = prio_i == 0 ? 0 : priority_thresholds[j][prio_i-1]+1;
+				uint32_t end_to = prio_i == (USED_PRIORITY_NUM -1) ? LARYER_NUM-1 : priority_thresholds[j][prio_i];
+				para_count = 1;
+				for (int layer_i = 0; layer_i < LARYER_NUM; layer_i++) {
+					if (global_recv_send_index_order[i][j][layer_i] >= start_from && global_recv_send_index_order[i][j][layer_i] <= end_to) {
+						recv_send_index_order[i][j][USED_HIGHEST_PRIORITY - prio_i][para_count++] = global_recv_send_index_order[i][j][layer_i];
+					}
+				}
 			}
-			orderfile << "\n\n";
+
+			for (int prio_i = 0; prio_i < USED_PRIORITY_NUM; prio_i++){
+				for (int layer_i = 0; layer_i < LARYER_NUM+1; layer_i++)
+					orderfile << recv_send_index_order[i][j][USED_HIGHEST_PRIORITY- USED_PRIORITY_NUM+1 + prio_i][layer_i] << " ";
+				orderfile << "\n";
+			}
 		}
 	}
 }
@@ -434,7 +451,7 @@ int main(int argc, char *argv[])
 		ps0.SetAttribute("ToWorker", UintegerValue(dst));
 		ps0.SetAttribute("NumLayers", UintegerValue(LARYER_NUM));
 		ps0.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
-		ps0.SetAttribute("NumPriorities", UintegerValue(1));
+		ps0.SetAttribute("NumPriorities", UintegerValue(USED_PRIORITY_NUM));
 		ApplicationContainer apps0c = ps0.Install(n.Get(src));
 
 		apps0c.Start(Seconds(start_time));
@@ -529,12 +546,12 @@ int one2one_traffic(string path, int server_num)
 
 	flowfile.open(path);
 	// output first line, flow #
-	flowfile << flow_num << endl;
+	flowfile << 2*flow_num << endl;
 	for (int i = 0; i < server_num; i++)
 		for (int j = 0; j < server_num; j++)
 			if (i != j) {
 				flowfile << i << " " << j << " " << "2" << " " << packet_num << " " << start_time << " " << end_time << std::endl;
-				//flowfile << i << " " << j << " " << "3" << " " << packet_num << " " << start_time << " " << end_time << std::endl;
+				flowfile << i << " " << j << " " << "3" << " " << packet_num << " " << start_time << " " << end_time << std::endl;
 			}
 	//flowfile << 2 << endl;
 	// output the rest line, src dst priority packet# start_time end_time
