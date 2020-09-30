@@ -74,6 +74,41 @@ PS::GetTypeId (void)
                    UintegerValue (1024),
                    MakeUintegerAccessor (&PS::m_size),
                    MakeUintegerChecker<uint32_t> (14,1500))
+    .AddAttribute ("PSID",
+                   "Parameter Server ID. One parameter server may have many parameter server process.",
+                   UintegerValue (0),
+                   MakeUintegerAccessor (&PS::m_ps_id),
+                   MakeUintegerChecker<uint16_t> (0,65535))
+    .AddAttribute ("ToWorker",
+                   "The worker that this app sends to.",
+                   UintegerValue (0),
+                   MakeUintegerAccessor (&PS::m_worker_id),
+                   MakeUintegerChecker<uint16_t> (0,65535))
+    .AddAttribute ("IndexOrder",
+                   "IndexOrder.",
+                   UintegerValue (0),
+                   MakeUintegerAccessor (&PS::m_index_order_address),
+                   MakeUintegerChecker<uint64_t> (0, -1))
+    .AddAttribute ("ParameterSizes",
+                   "ParameterSizes.",
+                   UintegerValue (0),
+                   MakeUintegerAccessor (&PS::m_parameter_sizes_address),
+                   MakeUintegerChecker<uint64_t> (0, -1))
+    .AddAttribute ("NumLayers",
+                   "NumLayers",
+                   UintegerValue (0),
+                   MakeUintegerAccessor (&PS::m_num_layers),
+                   MakeUintegerChecker<uint16_t> (0,65535))
+    .AddAttribute ("NumServers",
+                   "NumServers",
+                   UintegerValue (0),
+                   MakeUintegerAccessor (&PS::m_num_servers),
+                   MakeUintegerChecker<uint16_t> (0,65535))
+    .AddAttribute ("NumPriorities",
+                   "NumPriorities",
+                   UintegerValue (0),
+                   MakeUintegerAccessor (&PS::m_num_priorities),
+                   MakeUintegerChecker<uint16_t> (0,65535))
   ;
   return tid;
 }
@@ -83,6 +118,7 @@ PS::PS ()
 {
   NS_LOG_FUNCTION_NOARGS ();
   m_sent = 0;
+  m_sent_paras = 0;
   m_received = 0;
   m_socket = 0;
   m_sendEvent = EventId ();
@@ -122,9 +158,29 @@ PS::DoDispose (void)
 }
 
 void
+PS::GetParameters (void)
+{
+  uint32_t* tmp_addr = (uint32_t*) m_parameter_sizes_address;
+  for (int k = 0; k < m_num_layers; k++) 
+    m_parameter_sizes.push_back(tmp_addr[k]);
+  tmp_addr = (uint32_t*) m_index_order_address;
+  m_index_order = (uint32_t*)tmp_addr + (m_num_layers+1)*(m_pg+8*(m_ps_id+m_num_servers*m_worker_id)) + 1;
+
+  std::cout << m_ps_id << " " << m_worker_id << " " << m_pg << "\n";
+  for (int k = 0; k < m_num_layers; k++) 
+    std::cout << m_parameter_sizes[k] << " ";
+  std::cout << "\n";
+  for (int k = 0; k < m_num_layers; k++) 
+    std::cout << m_index_order[k] << " ";
+  std::cout << "\n";
+}
+
+void
 PS::StartApplication (void)
 {
   NS_LOG_FUNCTION_NOARGS ();
+
+  GetParameters();
 
   if (m_socket == 0)
     {
@@ -194,7 +250,20 @@ PS::Send (void)
 	  SeqTsHeader seqTs;
 	  seqTs.SetSeq (m_sent);
 	  seqTs.SetPG (m_pg);
-	  Ptr<Packet> p = Create<Packet> (m_size-14-10); // 14 : the size of the seqTs header, 10: the size of qbb header
+    uint32_t para_index = m_index_order[m_sent_paras];
+    seqTs.SetParaID(para_index);
+    uint32_t this_send_size;
+    if (m_parameter_sizes[para_index] > m_size)
+      this_send_size = m_size;
+    else {
+      this_send_size = m_parameter_sizes[para_index];
+      std::cout << m_worker_id << " " << m_ps_id << " " << m_pg << " " << para_index << " " << m_sent+1 << " " << m_sent_paras+1 << "\n";
+      m_sent_paras++;
+    }
+    //std::cout << "p " << m_worker_id << " " << m_ps_id << " " << m_pg << " " << para_index << " " << m_parameter_sizes[para_index] << "\n";
+    m_parameter_sizes[para_index] -= this_send_size;
+    this_send_size = this_send_size < 16 ? 16 : this_send_size;
+	  Ptr<Packet> p = Create<Packet> (this_send_size - 16); // 16 : the size of the seqTs header
 	  p->AddHeader (seqTs);
 
 	  std::stringstream peerAddressStringStream;

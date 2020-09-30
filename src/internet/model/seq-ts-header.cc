@@ -58,6 +58,16 @@ SeqTsHeader::GetPG (void) const
 	return m_pg;
 }
 
+void
+SeqTsHeader::SetParaID (uint16_t para_id)
+{
+	m_para_id = para_id;
+}
+uint16_t
+SeqTsHeader::GetParaID (void) const
+{
+	return m_para_id;
+}
 
 Time
 SeqTsHeader::GetTs (void) const
@@ -84,12 +94,12 @@ SeqTsHeader::Print (std::ostream &os) const
 {
   //os << "(seq=" << m_seq << " time=" << TimeStep (m_ts).GetSeconds () << ")";
 	//os << m_seq << " " << TimeStep (m_ts).GetSeconds () << " " << m_pg;
-	os << m_seq << " " << m_pg;
+	os << m_seq << " " << m_pg << " " << m_para_id;
 }
 uint32_t
 SeqTsHeader::GetSerializedSize (void) const
 {
-  return 14;
+  return 16;
 }
 
 void
@@ -99,6 +109,7 @@ SeqTsHeader::Serialize (Buffer::Iterator start) const
   i.WriteHtonU32 (m_seq);
   i.WriteHtonU64 (m_ts);
   i.WriteHtonU16 (m_pg);
+  i.WriteHtonU16 (m_para_id);
 }
 uint32_t
 SeqTsHeader::Deserialize (Buffer::Iterator start)
@@ -107,6 +118,7 @@ SeqTsHeader::Deserialize (Buffer::Iterator start)
   m_seq = i.ReadNtohU32 ();
   m_ts =  i.ReadNtohU64 ();
   m_pg =  i.ReadNtohU16 ();
+  m_para_id = i.ReadNtohU16 ();
   return GetSerializedSize ();
 }
 

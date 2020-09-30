@@ -66,6 +66,7 @@ protected:
 
 private:
 
+  virtual void GetParameters (void);
   virtual void StartApplication (void);
   virtual void StopApplication (void);
 
@@ -88,6 +89,17 @@ private:
   PacketLossCounter m_lossCounter;
 
   uint16_t m_pg;
+  uint16_t m_ps_id;
+  uint16_t m_worker_id;
+  uint64_t m_index_order_address;
+  uint32_t* m_index_order;
+  uint64_t m_parameter_sizes_address;
+  std::vector<uint32_t> m_parameter_sizes;
+
+  uint16_t m_num_layers;
+  uint16_t m_num_servers;
+  uint16_t m_num_priorities;
+  uint32_t m_sent_paras;
 
 };
 

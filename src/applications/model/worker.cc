@@ -247,6 +247,7 @@ Worker::HandleRead (Ptr<Socket> socket)
                            " TXtime: " << seqTs.GetTs () <<
                            " RXtime: " << Simulator::Now () <<
                            " Delay: " << Simulator::Now () - seqTs.GetTs ());
+              //std::cout << (uint32_t)seqTs.GetMinID() << " " << (uint32_t)seqTs.GetMaxID() << "\n";
             }
           else if (Inet6SocketAddress::IsMatchingType (from))
             {

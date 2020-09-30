@@ -101,6 +101,7 @@ public:
 
   PSHelper (Ipv4Address ip, uint16_t port);
   PSHelper (Ipv4Address ip, uint16_t port, uint16_t pg);
+  PSHelper (Ipv4Address ip, uint16_t port, uint16_t pg, uint64_t index_order_address, uint64_t para_sizes);
   PSHelper (Ipv6Address ip, uint16_t port);
   PSHelper (Address ip, uint16_t port);
 

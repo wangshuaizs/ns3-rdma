@@ -105,8 +105,6 @@ private:
   uint32_t m_size;
   EventId m_sendEvent;
 
-  
-
 };
 
 } // namespace ns3

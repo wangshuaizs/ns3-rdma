@@ -86,13 +86,16 @@ bool clamp_target_rate = false, clamp_target_rate_after_timer = false, send_in_c
 double error_rate_per_link = 0.0;
 NodeContainer n;
 #define SERVER_NUM 3
+#define LARYER_NUM 19
+#define PRIORITY_NUM 8
 #define port_num 4000
-bool used_port[SERVER_NUM][port_num] = { false };  //µÚ1Î¬Îªpow(kkk,nnn),µÚ2Î¬ÖÁÉÙÎªnnn*nnn*(kkk-1)
-int pkt_num = 10000; //max = "4294967295";
-vector<int> layer_paras = { 7168, 147712, 295424, 590336, 1180672, 2360320, 2360320, 2360320, 4720640, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 411058176, 67125248, 16404388 };
-vector<vector<vector<int>>> recv_send_para_order;
-vector<vector<vector<int>>> recv_send_index_order;
-vector<int> ready_patitions(SERVER_NUM);
+bool used_port[SERVER_NUM][port_num] = { false };  //ï¿½ï¿½1Î¬Îªpow(kkk,nnn),ï¿½ï¿½2Î¬ï¿½ï¿½ï¿½ï¿½Îªnnn*nnn*(kkk-1)
+int pkt_num = 133809; //max = "4294967295";
+vector<uint32_t> layer_paras = { 7168, 147712, 295424, 590336, 1180672, 2360320, 2360320, 2360320, 4720640, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 411058176, 67125248, 16404388 };
+uint32_t para_sizes[LARYER_NUM];
+uint32_t global_recv_send_index_order[SERVER_NUM][SERVER_NUM][LARYER_NUM]; // recv/sender/para
+uint32_t recv_send_index_order[SERVER_NUM][SERVER_NUM][PRIORITY_NUM][LARYER_NUM+1]; // recv/sender/pg/para
+vector<uint32_t> ready_patitions(SERVER_NUM);
 
 std::string pcap_file = "mix/rdma_one_switch_one2one_pcap";
 std::string FLOW_PATH = "mix/rdma_one_switch_one2one_flow.txt";
@@ -132,32 +135,34 @@ void generate_random_send_order(void)
 	vector<int> indexs;
 	int para_count = 0;
 	for (auto& it : layer_paras) {
-		partioned_layer_paras.push_back(it / SERVER_NUM);
+		para_sizes[para_count] = it / SERVER_NUM;
 		indexs.push_back(para_count++);
 	}
 
-	recv_send_para_order.resize(SERVER_NUM);  // n senders
-	recv_send_index_order.resize(SERVER_NUM);
 	for (int i = 0; i < SERVER_NUM; i++) {
-		recv_send_para_order[i].resize(SERVER_NUM); // n receivers
-		recv_send_index_order[i].resize(SERVER_NUM);
 		for (int j = 0; j < SERVER_NUM; j++) {
-			//recv_send_para_order[i][j].resize(partioned_layer_paras.size()); // m layers
 			unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
 			shuffle(indexs.begin(), indexs.end(), std::default_random_engine(seed));
 
-			int bytes = 0;
+			int k = 0;
 			for (auto& it : indexs) {
-				bytes += partioned_layer_paras[it];
-				recv_send_para_order[i][j].push_back(ceil(bytes*1.0 / packet_payload_size));
-				recv_send_index_order[i][j].push_back(it);
+				global_recv_send_index_order[i][j][k] = it;
+				k++;
 			}
-			for (auto& it : recv_send_index_order[i][j]) {
-				orderfile << it << " ";
+			for (int kk = 0; kk < LARYER_NUM; kk++) {
+				std::cout << global_recv_send_index_order[i][j][kk] << " ";
 			}
-			orderfile << "\n";
-			for (auto& it : recv_send_para_order[i][j]) {
-				orderfile << it << " ";
+			std::cout << "\n\n";
+
+			// TODO: split among differnet priorities
+			for (int kk = 0; kk < LARYER_NUM+1; kk++) {
+				if (kk == 0)
+					recv_send_index_order[i][j][2][kk] = LARYER_NUM;
+				else
+					recv_send_index_order[i][j][2][kk] = global_recv_send_index_order[i][j][kk-1];
+			}
+			for (int kk = 0; kk < LARYER_NUM+1; kk++) {
+				orderfile << recv_send_index_order[i][j][2][kk] << " ";
 			}
 			orderfile << "\n\n";
 		}
@@ -399,6 +404,13 @@ int main(int argc, char *argv[])
 	uint32_t packetSize = packet_payload_size;
 	Time interPacketInterval = Seconds(0.0000005 / 2);
 
+	for (uint32_t i = 0; i < SERVER_NUM; i++)
+	{
+		WorkerHelper worker0(5001);
+		//UdpServerHelper worker0(port);
+		ApplicationContainer apps0s = worker0.Install(n.Get(i));
+		apps0s.Start(Seconds(app_start_time));
+	}
 	for (uint32_t i = 0; i < flow_num; i++)
 	{
 		uint32_t src, dst, pg, maxPacketCount, port;
@@ -411,21 +423,23 @@ int main(int argc, char *argv[])
 		Ptr<Ipv4> ipv4 = n.Get(dst)->GetObject<Ipv4>();
 		Ipv4Address serverAddress = ipv4->GetAddress(1, 0).GetLocal(); //GetAddress(0,0) is the loopback 127.0.0.1
 
-		WorkerHelper server0(port);
-		//UdpServerHelper server0(port);
-		ApplicationContainer apps0s = server0.Install(n.Get(dst));
+		PSHelper ps0(serverAddress, port, pg, (uint64_t)recv_send_index_order, (uint64_t)para_sizes); //Add Priority
+		//ps0.SetAttribute("PSID", UintegerValue(dst));
+		//ps0.SetAttribute("IndexOrder", UintegerValue((uint64_t)&recv_send_index_order));
+		//UdpClientHelper ps0(serverAddress, port, pg); //Add Priority
+		ps0.SetAttribute("MaxPackets", UintegerValue(maxPacketCount));
+		ps0.SetAttribute("Interval", TimeValue(interPacketInterval));
+		ps0.SetAttribute("PacketSize", UintegerValue(packetSize));
+		ps0.SetAttribute("PSID", UintegerValue(src));
+		ps0.SetAttribute("ToWorker", UintegerValue(dst));
+		ps0.SetAttribute("NumLayers", UintegerValue(LARYER_NUM));
+		ps0.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
+		ps0.SetAttribute("NumPriorities", UintegerValue(1));
+		ApplicationContainer apps0c = ps0.Install(n.Get(src));
 
-		PSHelper client0(serverAddress, port, pg); //Add Priority
-		//UdpClientHelper client0(serverAddress, port, pg); //Add Priority
-		client0.SetAttribute("MaxPackets", UintegerValue(maxPacketCount));
-		client0.SetAttribute("Interval", TimeValue(interPacketInterval));
-		client0.SetAttribute("PacketSize", UintegerValue(packetSize));
-		ApplicationContainer apps0c = client0.Install(n.Get(src));
-
-		apps0s.Start(Seconds(app_start_time));
 		apps0c.Start(Seconds(start_time));
 
-		//Ptr<UdpServer> sink = server0.GetServer();
+		//Ptr<UdpServer> sink = worker0.GetServer();
 		//Simulator::Schedule(Seconds(0.0), &stream2parameter, sink, src, dst);
 
 
@@ -508,19 +522,19 @@ int one2one_traffic(string path, int server_num)
 {
 	ofstream flowfile;
 	int flow_num = server_num * (server_num - 1);
-	string priority = "3";
+	string priority = "2";
 	int packet_num = pkt_num; //max = "4294967295";
 	string start_time = "1.0";
 	string end_time = "5.0";
 
 	flowfile.open(path);
 	// output first line, flow #
-	flowfile << 2 * flow_num << endl;
+	flowfile << flow_num << endl;
 	for (int i = 0; i < server_num; i++)
 		for (int j = 0; j < server_num; j++)
 			if (i != j) {
-				flowfile << i << " " << j << " " << "3" << " " << packet_num << " " << start_time << " " << end_time << std::endl;
-				flowfile << i << " " << j << " " << "4" << " " << packet_num << " " << start_time << " " << end_time << std::endl;
+				flowfile << i << " " << j << " " << "2" << " " << packet_num << " " << start_time << " " << end_time << std::endl;
+				//flowfile << i << " " << j << " " << "3" << " " << packet_num << " " << start_time << " " << end_time << std::endl;
 			}
 	//flowfile << 2 << endl;
 	// output the rest line, src dst priority packet# start_time end_time

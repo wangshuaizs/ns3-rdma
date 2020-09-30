@@ -53,6 +53,9 @@ public:
   void SetPG (uint16_t pg);
   uint16_t GetPG () const;
 
+  void SetParaID (uint16_t para_id);
+  uint16_t GetParaID () const;
+
   static TypeId GetTypeId (void);
 private:
   virtual TypeId GetInstanceTypeId (void) const;
@@ -64,6 +67,7 @@ private:
   uint32_t m_seq;
   uint64_t m_ts;
   uint16_t m_pg;
+  uint16_t m_para_id;
 };
 
 } // namespace ns3

@@ -89,6 +89,15 @@ PSHelper::PSHelper (Ipv4Address address, uint16_t port, uint16_t pg)
 	SetAttribute ("PriorityGroup", UintegerValue (pg));
 }
 
+PSHelper::PSHelper (Ipv4Address address, uint16_t port, uint16_t pg, uint64_t index_order_address, uint64_t para_sizes)
+{
+	m_factory.SetTypeId (PS::GetTypeId ());
+	SetAttribute ("RemoteAddress", AddressValue (Address(address)));
+	SetAttribute ("RemotePort", UintegerValue (port));
+	SetAttribute ("PriorityGroup", UintegerValue (pg));
+  SetAttribute ("IndexOrder", UintegerValue (index_order_address));
+  SetAttribute ("ParameterSizes", UintegerValue (para_sizes));
+}
 
 PSHelper::PSHelper (Ipv6Address address, uint16_t port)
 {
