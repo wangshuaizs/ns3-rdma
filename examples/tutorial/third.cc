@@ -85,22 +85,22 @@ std::string rate_ai, rate_hai;
 bool clamp_target_rate = false, clamp_target_rate_after_timer = false, send_in_chunks = true, l2_wait_for_ack = false, l2_back_to_zero = false, l2_test_read = false;
 double error_rate_per_link = 0.0;
 NodeContainer n;
-#define SERVER_NUM 3
+#define SERVER_NUM 64
 #define LARYER_NUM 19
 #define PRIORITY_NUM 8
 #define USED_PRIORITY_NUM 2
 #define USED_HIGHEST_PRIORITY 3
-int pkt_num = 4294967295; // 18717; //max = "4294967295";
+uint32_t pkt_num = 4294967295; // 18717; //max = "4294967295";
 
-// vector<uint32_t> layer_paras : unit Bytes
-// vector<uint32_t> op_times : unit us
-// VGG19
+						  // vector<uint32_t> layer_paras : unit Bytes
+						  // vector<uint32_t> op_times : unit us
+						  // VGG19
 vector<uint32_t> layer_paras = { 7168, 147712, 295424, 590336, 1180672, 2360320, 2360320, 2360320, 4720640, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 411058176, 67125248, 16404388 };
-uint32_t op_times[] = { 30319, 91665, 39119, 53470, 26756, 42353, 42394, 42367, 24336, 39367, 39365, 39363, 13403, 13374, 13378, 13374, 10459, 1634, 634};
+uint32_t op_times[] = { 30319, 91665, 39119, 53470, 26756, 42353, 42394, 42367, 24336, 39367, 39365, 39363, 13403, 13374, 13378, 13374, 10459, 1634, 634 };
 
 uint32_t para_sizes[LARYER_NUM];
 uint32_t global_recv_send_index_order[SERVER_NUM][SERVER_NUM][LARYER_NUM]; // recv/sender/para
-uint32_t recv_send_index_order[SERVER_NUM][SERVER_NUM][PRIORITY_NUM][LARYER_NUM+1]; // recv/sender/pg/para
+uint32_t recv_send_index_order[SERVER_NUM][SERVER_NUM][PRIORITY_NUM][LARYER_NUM + 1]; // recv/sender/pg/para
 vector<uint32_t> ready_patitions(SERVER_NUM);
 
 std::string pcap_file = "mix/rdma_one_switch_one2one_pcap";
@@ -113,45 +113,19 @@ int one_switch_topology_generate(string path, int k);
 int one2one_traffic(string path, int server_num);
 int tracetraffice(string path, int server_num);
 
-uint8_t flag10010 = 0, flag100 = 0, flag10 = 0;
-
-void
-stream2parameter(Ptr<UdpServer> sink, uint32_t src, uint32_t dst)
-{
-	if (sink->GetReceived() > 10010 && flag10010 == 0) {
-		std::cout << "sink->GetReceived() > 10010\n";
-		flag10010 = 1;
-	}
-	else if (sink->GetReceived() > 100 && flag100 == 0) {
-		std::cout << "sink->GetReceived() > 100\n";
-		flag100 = 1;
-	}
-	else if (sink->GetReceived() > 10 && flag10 == 0) {
-		std::cout << "sink->GetReceived() > 10\n";
-		flag10 = 1;
-	}
-	//Simulator::Schedule(MicroSeconds(1.0), &stream2parameter, sink, src, dst);
-}
-
-void generate_random_send_order(void)
+void generate_global_random_send_order(void)
 {
 	ofstream orderfile;
 	orderfile.open(order_filepath);
-	vector<float> partioned_layer_paras;
 	vector<int> indexs;
 	int para_count = 0;
 	for (auto& it : layer_paras) {
-		para_sizes[para_count] = ceil(it*1.0 / SERVER_NUM / 10);
+		para_sizes[para_count] = ceil(it*1.0 / SERVER_NUM);
 		//std::cout << para_sizes[para_count] << " ";
 		indexs.push_back(para_count++);
 	}
 	//std::cout << "\n";
 
-#if (USED_PRIORITY_NUM > 1)
-	uint32_t priority_thresholds[SERVER_NUM][USED_PRIORITY_NUM - 1];
-	for (int i = 0; i < SERVER_NUM; i++)
-		for (int j = 0; j < USED_PRIORITY_NUM - 1; j++)
-			priority_thresholds[i][j] = 8;
 	for (int i = 0; i < SERVER_NUM; i++) {
 		for (int j = 0; j < SERVER_NUM; j++) {
 			//unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
@@ -168,7 +142,36 @@ void generate_random_send_order(void)
 			std::cout << global_recv_send_index_order[i][j][kk] << " ";
 			}
 			std::cout << "\n";*/
+			for (int layer_i = 0; layer_i < LARYER_NUM; layer_i++)
+				orderfile << global_recv_send_index_order[i][j][layer_i] << " ";
+			orderfile << "\n";
+		}
+	}
 
+	orderfile.close();
+}
+
+void read_random_send_order(void)
+{
+	ifstream orderfile;
+	ofstream priorityorderfile;
+	orderfile.open(order_filepath.c_str());
+	priorityorderfile.open("mix/priority_order_file.txt");
+
+	for (int i = 0; i < SERVER_NUM; i++) {
+		for (int j = 0; j < SERVER_NUM; j++) {
+			for (int layer_i = 0; layer_i < LARYER_NUM; layer_i++)
+				orderfile >> global_recv_send_index_order[i][j][layer_i];
+		}
+	}
+
+#if (USED_PRIORITY_NUM > 1)
+	uint32_t priority_thresholds[SERVER_NUM][USED_PRIORITY_NUM - 1];
+	for (int i = 0; i < SERVER_NUM; i++)
+		for (int j = 0; j < USED_PRIORITY_NUM - 1; j++)
+			priority_thresholds[i][j] = 8;
+	for (int i = 0; i < SERVER_NUM; i++)
+		for (int j = 0; j < SERVER_NUM; j++) {
 			recv_send_index_order[i][j][USED_HIGHEST_PRIORITY][0] = priority_thresholds[j][0] + 1;
 			for (int prio_i = 1; prio_i < USED_PRIORITY_NUM - 1; prio_i++) {
 				recv_send_index_order[i][j][USED_HIGHEST_PRIORITY - prio_i][0] = priority_thresholds[j][prio_i] - priority_thresholds[j][prio_i - 1];
@@ -178,7 +181,7 @@ void generate_random_send_order(void)
 			for (int prio_i = 0; prio_i < USED_PRIORITY_NUM; prio_i++) {
 				uint32_t start_from = prio_i == 0 ? 0 : priority_thresholds[j][prio_i - 1] + 1;
 				uint32_t end_to = prio_i == (USED_PRIORITY_NUM - 1) ? LARYER_NUM - 1 : priority_thresholds[j][prio_i];
-				para_count = 1;
+				int para_count = 1;
 				for (int layer_i = 0; layer_i < LARYER_NUM; layer_i++) {
 					if (global_recv_send_index_order[i][j][layer_i] >= start_from && global_recv_send_index_order[i][j][layer_i] <= end_to) {
 						recv_send_index_order[i][j][USED_HIGHEST_PRIORITY - prio_i][para_count++] = global_recv_send_index_order[i][j][layer_i];
@@ -187,39 +190,24 @@ void generate_random_send_order(void)
 			}
 			for (int prio_i = 0; prio_i < USED_PRIORITY_NUM; prio_i++) {
 				for (int layer_i = 0; layer_i < LARYER_NUM + 1; layer_i++)
-					orderfile << recv_send_index_order[i][j][USED_HIGHEST_PRIORITY - USED_PRIORITY_NUM + 1 + prio_i][layer_i] << " ";
-				orderfile << "\n";
+					priorityorderfile << recv_send_index_order[i][j][USED_HIGHEST_PRIORITY - USED_PRIORITY_NUM + 1 + prio_i][layer_i] << " ";
+				priorityorderfile << "\n";
 			}
 		}
-	}
-#else 
-	for (int i = 0; i < SERVER_NUM; i++) {
+#else
+	for (int i = 0; i < SERVER_NUM; i++)
 		for (int j = 0; j < SERVER_NUM; j++) {
-			//unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-			//shuffle(indexs.begin(), indexs.end(), std::default_random_engine(seed));
-			unsigned seed = (i + 3)*(j + 7);
-			shuffle(indexs.begin(), indexs.end(), std::default_random_engine(seed));
-
-			int k = 0;
-			for (auto& it : indexs) {
-				global_recv_send_index_order[i][j][k] = it;
-				k++;
-			}
-			/*for (int kk = 0; kk < LARYER_NUM; kk++) {
-			std::cout << global_recv_send_index_order[i][j][kk] << " ";
-			}
-			std::cout << "\n";*/
-
 			recv_send_index_order[i][j][USED_HIGHEST_PRIORITY][0] = LARYER_NUM;
 			for (int layer_i = 0; layer_i < LARYER_NUM; layer_i++)
-				recv_send_index_order[i][j][USED_HIGHEST_PRIORITY][layer_i+1] = global_recv_send_index_order[i][j][layer_i];
+				recv_send_index_order[i][j][USED_HIGHEST_PRIORITY][layer_i + 1] = global_recv_send_index_order[i][j][layer_i];
 
 			for (int layer_i = 0; layer_i < LARYER_NUM + 1; layer_i++)
-				orderfile << recv_send_index_order[i][j][USED_HIGHEST_PRIORITY][layer_i] << " ";
-			orderfile << "\n";
+				priorityorderfile << recv_send_index_order[i][j][USED_HIGHEST_PRIORITY][layer_i] << " ";
+			priorityorderfile << "\n";
 		}
-	}
 #endif
+	orderfile.close();
+	priorityorderfile.close();
 }
 
 int main(int argc, char *argv[])
@@ -227,7 +215,8 @@ int main(int argc, char *argv[])
 	one_switch_topology_generate(TOPO_PATH, SERVER_NUM);
 	one2one_traffic(FLOW_PATH, SERVER_NUM);
 	tracetraffice(TRACE_PATH, SERVER_NUM);
-	generate_random_send_order();
+	generate_global_random_send_order();
+	read_random_send_order();
 
 	topology_file = TOPO_PATH;
 	flow_file = FLOW_PATH;
@@ -445,9 +434,14 @@ int main(int argc, char *argv[])
 		tracef >> nid;
 		trace_nodes = NodeContainer(trace_nodes, n.Get(nid));
 	}
+	NodeContainer trace_nodes2;
+	for (uint32_t i = 0; i < 3; i++)
+	{
+		trace_nodes2 = NodeContainer(trace_nodes2, n.Get(i));
+	}
 	AsciiTraceHelper ascii;
 	qbb.EnableAscii(ascii.CreateFileStream(trace_output_file), trace_nodes);
-	qbb.EnablePcap(pcap_file, trace_nodes, true);
+	qbb.EnablePcap(pcap_file, trace_nodes2, true);
 
 	Ipv4GlobalRoutingHelper::PopulateRoutingTables();
 	std::cout << "Routing complete.\n";
@@ -579,7 +573,7 @@ int one2one_traffic(string path, int server_num)
 	ofstream flowfile;
 	int flow_num = server_num * (server_num - 1);
 	string priority = "2";
-	int packet_num = pkt_num; //max = "4294967295";
+	uint32_t packet_num = pkt_num; //max = "4294967295";
 	string start_time = "0.0";
 	string end_time = "10.0";
 
@@ -590,7 +584,7 @@ int one2one_traffic(string path, int server_num)
 		for (int j = 0; j < server_num; j++)
 			if (i != j) {
 				for (int k = 0; k < USED_PRIORITY_NUM; k++)
-					flowfile << i << " " << j << " " << std::to_string((USED_HIGHEST_PRIORITY-k)) << " " << packet_num << " " << start_time << " " << end_time << std::endl;
+					flowfile << i << " " << j << " " << std::to_string((USED_HIGHEST_PRIORITY - k)) << " " << packet_num << " " << start_time << " " << end_time << std::endl;
 				//flowfile << i << " " << j << " " << "3" << " " << packet_num << " " << start_time << " " << end_time << std::endl;
 			}
 	//flowfile << 2 << endl;
@@ -613,13 +607,13 @@ int tracetraffice(string path, int server_num)
 	ofstream tracefile;
 
 	tracefile.open(path);
-	/*tracefile << server_num << endl;
+	tracefile << server_num << endl;
 	for (int i = 0; i < server_num; i++)
-		tracefile << i << endl;*/
-	tracefile << 3 << endl;
+		tracefile << i << endl;
+	/*tracefile << 3 << endl;
 	tracefile << 0 << endl;
 	tracefile << 1 << endl;
-	tracefile << 2 << endl;
+	tracefile << 2 << endl;*/
 
 	tracefile << "\n\nFirst line: tracing node #" << endl;
 	tracefile << "Node IDs..." << endl;
