@@ -80,6 +80,7 @@ protected:
 
 private:
 
+  virtual void GetParameters (void);
   virtual void StartApplication (void);
   virtual void StopApplication (void);
 
@@ -102,9 +103,16 @@ private:
 
   
   Time m_interval;
-  uint32_t m_size;
   EventId m_sendEvent;
 
+  uint16_t m_worker_id;
+  uint64_t m_parameter_sizes_address;
+  std::vector<uint32_t> m_parameter_sizes;
+  uint16_t m_num_layers;
+  uint16_t m_num_servers;
+  uint32_t m_size;
+  std::vector<uint32_t> m_partition_ready_bars;
+  std::vector<uint32_t> m_num_patitions;
 };
 
 } // namespace ns3

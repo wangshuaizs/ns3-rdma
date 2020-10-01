@@ -582,7 +582,7 @@ namespace ns3 {
 					Simulator::Cancel(m_resumeEvt[qIndex]);
 					m_resumeEvt[qIndex] = Simulator::Schedule(MicroSeconds(pauseh.GetTime()), &QbbNetDevice::PauseFinish, this, qIndex);
 					// count PFC frame, added by shuai
-					std::cout << "PFC pause frame " << std::setprecision(7) << Simulator::Now().GetSeconds() << "  " << m_node->GetId() << "  " << ipv4h.GetSource() << "  " << pauseh.GetQLen() << std::endl;
+					//std::cout << "PFC pause frame " << std::setprecision(7) << Simulator::Now().GetSeconds() << "  " << m_node->GetId() << "  " << ipv4h.GetSource() << "  " << pauseh.GetQLen() << std::endl;
 				}
 				else
 				{

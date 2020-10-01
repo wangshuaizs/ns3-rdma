@@ -115,6 +115,7 @@ namespace ns3 {
 
 	private:
 
+		uint32_t m_placeholder_for_safe_rw_maxBufferBytes;
 		uint32_t m_maxBufferBytes;
 		uint32_t m_usedTotalBytes;
 

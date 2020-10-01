@@ -250,21 +250,22 @@ PS::Send (void)
 	  SeqTsHeader seqTs;
 	  seqTs.SetSeq (m_sent);
 	  seqTs.SetPG (m_pg);
-    uint32_t para_index = m_index_order[m_sent_paras+1];
-    seqTs.SetParaID(para_index);
-    uint32_t this_send_size;
-    if (m_parameter_sizes[para_index] > m_size)
-      this_send_size = m_size;
-    else {
-      this_send_size = m_parameter_sizes[para_index];
-      //std::cout << m_worker_id << " " << m_ps_id << " " << m_pg << " " << para_index << " " << m_sent+1 << " " << m_sent_paras+1 << "\n";
-      m_sent_paras++;
-    }
-    //std::cout << "p " << m_worker_id << " " << m_ps_id << " " << m_pg << " " << para_index << " " << m_parameter_sizes[para_index] << "\n";
-    m_parameter_sizes[para_index] -= this_send_size;
-    this_send_size = this_send_size < 16 ? 16 : this_send_size;
-	  Ptr<Packet> p = Create<Packet> (this_send_size - 16); // 16 : the size of the seqTs header
-	  p->AddHeader (seqTs);
+    // uint32_t para_index = m_index_order[m_sent_paras+1];
+    // seqTs.SetParaID(para_index);
+    // uint32_t this_send_size;
+    // if (m_parameter_sizes[para_index] > m_size)
+    //   this_send_size = m_size;
+    // else {
+    //   this_send_size = m_parameter_sizes[para_index];
+    //   //std::cout << m_worker_id << " " << m_ps_id << " " << m_pg << " " << para_index << " " << m_sent+1 << " " << m_sent_paras+1 << "\n";
+    //   m_sent_paras++;
+    // }
+    // //std::cout << "p " << m_worker_id << " " << m_ps_id << " " << m_pg << " " << para_index << " " << m_parameter_sizes[para_index] << "\n";
+    // m_parameter_sizes[para_index] -= this_send_size;
+    // this_send_size = this_send_size < 16 ? 16 : this_send_size;
+	  // Ptr<Packet> p = Create<Packet> (this_send_size - 16); // 16 : the size of the seqTs header
+	  Ptr<Packet> p = Create<Packet> (m_size - 16);
+    p->AddHeader (seqTs);
 
 	  std::stringstream peerAddressStringStream;
 	  if (Ipv4Address::IsMatchingType (m_peerAddress))
@@ -292,10 +293,11 @@ PS::Send (void)
 	  }
   }
 
-  if (m_sent_paras >= m_index_order[0])
-    m_socket->SetRecvCallback (MakeCallback (&PS::HandleRead, this));
+  //if (m_sent_paras >= m_index_order[0])
+  //  m_socket->SetRecvCallback (MakeCallback (&PS::HandleRead, this));
   //Yibo: add jitter here to avoid unfairness!!!!!
-  if (m_sent < m_allowed && m_sent_paras < m_index_order[0])
+  //if (m_sent < m_allowed && m_sent_paras < m_index_order[0])
+  if (m_sent < m_allowed)
     {
       m_sendEvent = Simulator::Schedule (Seconds(next_avail * UniformVariable(0.45,0.55).GetValue()), &PS::Send, this);
     }

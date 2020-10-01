@@ -88,17 +88,16 @@ NodeContainer n;
 #define SERVER_NUM 3
 #define LARYER_NUM 19
 #define PRIORITY_NUM 8
-#define USED_PRIORITY_NUM 2
+#define USED_PRIORITY_NUM 1
 #define USED_HIGHEST_PRIORITY 3
 #define port_num 4000
 bool used_port[SERVER_NUM][port_num] = { false };  //��1άΪpow(kkk,nnn),��2ά����Ϊnnn*nnn*(kkk-1)
-int pkt_num = 133809; //max = "4294967295";
+int pkt_num = 100000; //max = "4294967295";
 vector<uint32_t> layer_paras = { 7168, 147712, 295424, 590336, 1180672, 2360320, 2360320, 2360320, 4720640, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 411058176, 67125248, 16404388 };
 uint32_t para_sizes[LARYER_NUM];
 uint32_t global_recv_send_index_order[SERVER_NUM][SERVER_NUM][LARYER_NUM]; // recv/sender/para
 uint32_t recv_send_index_order[SERVER_NUM][SERVER_NUM][PRIORITY_NUM][LARYER_NUM+1]; // recv/sender/pg/para
 vector<uint32_t> ready_patitions(SERVER_NUM);
-uint32_t priority_thresholds[SERVER_NUM][USED_PRIORITY_NUM - 1];
 
 std::string pcap_file = "mix/rdma_one_switch_one2one_pcap";
 std::string FLOW_PATH = "mix/rdma_one_switch_one2one_flow.txt";
@@ -139,17 +138,21 @@ void generate_random_send_order(void)
 	int para_count = 0;
 	for (auto& it : layer_paras) {
 		para_sizes[para_count] = ceil(it*1.0 / SERVER_NUM / 10);
-		std::cout << para_sizes[para_count] << " ";
+		//std::cout << para_sizes[para_count] << " ";
 		indexs.push_back(para_count++);
 	}
-	std::cout << "\n";
+	//std::cout << "\n";
 
+#if (USED_PRIORITY_NUM > 1)
+	uint32_t priority_thresholds[SERVER_NUM][USED_PRIORITY_NUM - 1];
 	for (int i = 0; i < SERVER_NUM; i++)
 		for (int j = 0; j < USED_PRIORITY_NUM - 1; j++)
-			priority_thresholds[i][j] = 3*(i+1);
+			priority_thresholds[i][j] = 8;
 	for (int i = 0; i < SERVER_NUM; i++) {
 		for (int j = 0; j < SERVER_NUM; j++) {
-			unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+			//unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+			//shuffle(indexs.begin(), indexs.end(), std::default_random_engine(seed));
+			unsigned seed = (i + 3)*(j + 7);
 			shuffle(indexs.begin(), indexs.end(), std::default_random_engine(seed));
 
 			int k = 0;
@@ -157,20 +160,20 @@ void generate_random_send_order(void)
 				global_recv_send_index_order[i][j][k] = it;
 				k++;
 			}
-			for (int kk = 0; kk < LARYER_NUM; kk++) {
-				std::cout << global_recv_send_index_order[i][j][kk] << " ";
+			/*for (int kk = 0; kk < LARYER_NUM; kk++) {
+			std::cout << global_recv_send_index_order[i][j][kk] << " ";
 			}
-			std::cout << "\n";
+			std::cout << "\n";*/
 
 			recv_send_index_order[i][j][USED_HIGHEST_PRIORITY][0] = priority_thresholds[j][0] + 1;
-			for (int prio_i = 1; prio_i < USED_PRIORITY_NUM-1; prio_i++) {
-				recv_send_index_order[i][j][USED_HIGHEST_PRIORITY-prio_i][0] = priority_thresholds[j][prio_i] - priority_thresholds[j][prio_i-1];
+			for (int prio_i = 1; prio_i < USED_PRIORITY_NUM - 1; prio_i++) {
+				recv_send_index_order[i][j][USED_HIGHEST_PRIORITY - prio_i][0] = priority_thresholds[j][prio_i] - priority_thresholds[j][prio_i - 1];
 			}
-			recv_send_index_order[i][j][USED_HIGHEST_PRIORITY- USED_PRIORITY_NUM+1][0] = LARYER_NUM - priority_thresholds[j][USED_PRIORITY_NUM - 2] - 1;
+			recv_send_index_order[i][j][USED_HIGHEST_PRIORITY - USED_PRIORITY_NUM + 1][0] = LARYER_NUM - priority_thresholds[j][USED_PRIORITY_NUM - 2] - 1;
 
 			for (int prio_i = 0; prio_i < USED_PRIORITY_NUM; prio_i++) {
-				uint32_t start_from = prio_i == 0 ? 0 : priority_thresholds[j][prio_i-1]+1;
-				uint32_t end_to = prio_i == (USED_PRIORITY_NUM -1) ? LARYER_NUM-1 : priority_thresholds[j][prio_i];
+				uint32_t start_from = prio_i == 0 ? 0 : priority_thresholds[j][prio_i - 1] + 1;
+				uint32_t end_to = prio_i == (USED_PRIORITY_NUM - 1) ? LARYER_NUM - 1 : priority_thresholds[j][prio_i];
 				para_count = 1;
 				for (int layer_i = 0; layer_i < LARYER_NUM; layer_i++) {
 					if (global_recv_send_index_order[i][j][layer_i] >= start_from && global_recv_send_index_order[i][j][layer_i] <= end_to) {
@@ -178,14 +181,41 @@ void generate_random_send_order(void)
 					}
 				}
 			}
-
-			for (int prio_i = 0; prio_i < USED_PRIORITY_NUM; prio_i++){
-				for (int layer_i = 0; layer_i < LARYER_NUM+1; layer_i++)
-					orderfile << recv_send_index_order[i][j][USED_HIGHEST_PRIORITY- USED_PRIORITY_NUM+1 + prio_i][layer_i] << " ";
+			for (int prio_i = 0; prio_i < USED_PRIORITY_NUM; prio_i++) {
+				for (int layer_i = 0; layer_i < LARYER_NUM + 1; layer_i++)
+					orderfile << recv_send_index_order[i][j][USED_HIGHEST_PRIORITY - USED_PRIORITY_NUM + 1 + prio_i][layer_i] << " ";
 				orderfile << "\n";
 			}
 		}
 	}
+#else 
+	for (int i = 0; i < SERVER_NUM; i++) {
+		for (int j = 0; j < SERVER_NUM; j++) {
+			//unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+			//shuffle(indexs.begin(), indexs.end(), std::default_random_engine(seed));
+			unsigned seed = (i + 3)*(j + 7);
+			shuffle(indexs.begin(), indexs.end(), std::default_random_engine(seed));
+
+			int k = 0;
+			for (auto& it : indexs) {
+				global_recv_send_index_order[i][j][k] = it;
+				k++;
+			}
+			/*for (int kk = 0; kk < LARYER_NUM; kk++) {
+			std::cout << global_recv_send_index_order[i][j][kk] << " ";
+			}
+			std::cout << "\n";*/
+
+			recv_send_index_order[i][j][USED_HIGHEST_PRIORITY][0] = LARYER_NUM;
+			for (int layer_i = 0; layer_i < LARYER_NUM; layer_i++)
+				recv_send_index_order[i][j][USED_HIGHEST_PRIORITY][layer_i+1] = global_recv_send_index_order[i][j][layer_i];
+
+			for (int layer_i = 0; layer_i < LARYER_NUM + 1; layer_i++)
+				orderfile << recv_send_index_order[i][j][USED_HIGHEST_PRIORITY][layer_i] << " ";
+			orderfile << "\n";
+		}
+	}
+#endif
 }
 
 int main(int argc, char *argv[])
@@ -200,8 +230,8 @@ int main(int argc, char *argv[])
 	trace_file = TRACE_PATH;
 	trace_output_file = MIX_PATH;
 	app_start_time = 0.99;
-	app_stop_time = 8.01;
-	simulator_stop_time = 10.0;
+	app_stop_time = 10.01;
+	simulator_stop_time = 11.0;
 	send_in_chunks = 0;
 	enable_qcn = 0;
 	use_dynamic_pfc_threshold = 1;
@@ -426,6 +456,11 @@ int main(int argc, char *argv[])
 	for (uint32_t i = 0; i < SERVER_NUM; i++)
 	{
 		WorkerHelper worker0(5001);
+		worker0.SetAttribute("WorkerID", UintegerValue(i));
+		worker0.SetAttribute("PacketSize", UintegerValue(packetSize));
+		worker0.SetAttribute("NumLayers", UintegerValue(LARYER_NUM));
+		worker0.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
+		worker0.SetAttribute("ParameterSizes", UintegerValue((uint64_t)para_sizes));
 		//UdpServerHelper worker0(port);
 		ApplicationContainer apps0s = worker0.Install(n.Get(i));
 		apps0s.Start(Seconds(app_start_time));
@@ -490,14 +525,14 @@ int main(int argc, char *argv[])
 	endfile << (double)(endt - begint) / CLOCKS_PER_SEC << " s\n";
 	endfile.close();
 
-	char pause;
-	cin >> pause;
+	//char pause;
+	//cin >> pause;
 }
 
 int one_switch_topology_generate(string path, int k)
 {
 	ofstream topofile;
-	string link_rate = "40Gbps";
+	string link_rate = "25Gbps";
 	string link_delay = "0.001ms";
 	string link_error_rate = "0";
 	int server_num = SERVER_NUM;
@@ -544,15 +579,15 @@ int one2one_traffic(string path, int server_num)
 	string priority = "2";
 	int packet_num = pkt_num; //max = "4294967295";
 	string start_time = "1.0";
-	string end_time = "5.0";
+	string end_time = "10.0";
 
 	flowfile.open(path);
 	// output first line, flow #
-	flowfile << 2*flow_num << endl;
+	flowfile << flow_num << endl;
 	for (int i = 0; i < server_num; i++)
 		for (int j = 0; j < server_num; j++)
 			if (i != j) {
-				flowfile << i << " " << j << " " << "2" << " " << packet_num << " " << start_time << " " << end_time << std::endl;
+				//flowfile << i << " " << j << " " << "2" << " " << packet_num << " " << start_time << " " << end_time << std::endl;
 				flowfile << i << " " << j << " " << "3" << " " << packet_num << " " << start_time << " " << end_time << std::endl;
 			}
 	//flowfile << 2 << endl;
@@ -575,9 +610,13 @@ int tracetraffice(string path, int server_num)
 	ofstream tracefile;
 
 	tracefile.open(path);
-	tracefile << server_num << endl;
+	/*tracefile << server_num << endl;
 	for (int i = 0; i < server_num; i++)
-		tracefile << i << endl;
+		tracefile << i << endl;*/
+	tracefile << 3 << endl;
+	tracefile << 0 << endl;
+	tracefile << 1 << endl;
+	tracefile << 2 << endl;
 
 	tracefile << "\n\nFirst line: tracing node #" << endl;
 	tracefile << "Node IDs..." << endl;

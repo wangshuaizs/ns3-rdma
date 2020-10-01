@@ -58,6 +58,31 @@ Worker::GetTypeId (void)
                    MakeUintegerAccessor (&Worker::GetPacketWindowSize,
                                          &Worker::SetPacketWindowSize),
                    MakeUintegerChecker<uint16_t> (8,256))
+    .AddAttribute ("WorkerID",
+                   "WorkerID.",
+                   UintegerValue (0),
+                   MakeUintegerAccessor (&Worker::m_worker_id),
+                   MakeUintegerChecker<uint16_t> (0,65535))
+    .AddAttribute ("PacketSize",
+                   "Size of packets received.",
+                   UintegerValue (1024),
+                   MakeUintegerAccessor (&Worker::m_size),
+                   MakeUintegerChecker<uint32_t> (14,1500))
+    .AddAttribute ("ParameterSizes",
+                   "ParameterSizes.",
+                   UintegerValue (0),
+                   MakeUintegerAccessor (&Worker::m_parameter_sizes_address),
+                   MakeUintegerChecker<uint64_t> (0, -1))
+    .AddAttribute ("NumLayers",
+                   "NumLayers",
+                   UintegerValue (0),
+                   MakeUintegerAccessor (&Worker::m_num_layers),
+                   MakeUintegerChecker<uint16_t> (0,65535))
+    .AddAttribute ("NumServers",
+                   "NumServers",
+                   UintegerValue (0),
+                   MakeUintegerAccessor (&Worker::m_num_servers),
+                   MakeUintegerChecker<uint16_t> (0,65535))
   ;
   return tid;
 }
@@ -109,9 +134,29 @@ Worker::DoDispose (void)
 }
 
 void
+Worker::GetParameters (void)
+{
+  uint32_t* tmp_addr = (uint32_t*) m_parameter_sizes_address;
+  for (int k = 0; k < m_num_layers; k++) {
+    m_parameter_sizes.push_back(tmp_addr[k]);
+    m_partition_ready_bars.push_back(ceil(tmp_addr[k]*1.0/m_size)*(m_num_servers-1));
+  }
+  m_num_patitions.resize(m_num_layers);
+  /*(for (int k = 0; k < m_num_layers; k++) 
+    std::cout << m_parameter_sizes[k] << " ";
+  std::cout << "\n";
+
+  for (auto& it : m_partition_ready_bars)
+    std::cout << it << " ";
+  std::cout << "\n";*/
+}
+
+void
 Worker::StartApplication (void)
 {
   NS_LOG_FUNCTION (this);
+
+  GetParameters();
 
   if (m_socket == 0)
     {
@@ -247,7 +292,17 @@ Worker::HandleRead (Ptr<Socket> socket)
                            " TXtime: " << seqTs.GetTs () <<
                            " RXtime: " << Simulator::Now () <<
                            " Delay: " << Simulator::Now () - seqTs.GetTs ());
-              //std::cout << (uint32_t)seqTs.GetMinID() << " " << (uint32_t)seqTs.GetMaxID() << "\n";
+              uint32_t para_id = seqTs.GetParaID();
+              m_num_patitions[para_id]++;
+              if (m_num_patitions[para_id] >= m_partition_ready_bars[para_id]) {
+                if (m_num_patitions[para_id] > m_partition_ready_bars[para_id])
+                  std::cout << "> " << para_id << " " << m_num_patitions[para_id] << " " << m_partition_ready_bars[para_id] << "\n";
+                else
+                {
+                  std::cout << para_id << " @ " << m_worker_id << " is ready\n";
+                }
+                
+              }
             }
           else if (Inet6SocketAddress::IsMatchingType (from))
             {
