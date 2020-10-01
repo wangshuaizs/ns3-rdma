@@ -31,89 +31,89 @@
 #include "ns3/random-variable.h"
 #include "ns3/qbb-net-device.h"
 #include "ns3/ipv4-end-point.h"
-#include "ps.h"
+#include "worker2.h"
 #include "ns3/seq-ts-header.h"
 #include <stdlib.h>
 #include <stdio.h>
 
 namespace ns3 {
 
-NS_LOG_COMPONENT_DEFINE ("PS");
-NS_OBJECT_ENSURE_REGISTERED (PS);
+NS_LOG_COMPONENT_DEFINE ("Worker2");
+NS_OBJECT_ENSURE_REGISTERED (Worker2);
 
 TypeId
-PS::GetTypeId (void)
+Worker2::GetTypeId (void)
 {
-  static TypeId tid = TypeId ("ns3::PS")
+  static TypeId tid = TypeId ("ns3::Worker2")
     .SetParent<Application> ()
-    .AddConstructor<PS> ()
+    .AddConstructor<Worker2> ()
     .AddAttribute ("MaxPackets",
                    "The maximum number of packets the application will send",
                    UintegerValue (100),
-                   MakeUintegerAccessor (&PS::m_count),
+                   MakeUintegerAccessor (&Worker2::m_count),
                    MakeUintegerChecker<uint32_t> ())
     .AddAttribute ("Interval",
                    "The time to wait between packets", TimeValue (Seconds (1.0)),
-                   MakeTimeAccessor (&PS::m_interval),
+                   MakeTimeAccessor (&Worker2::m_interval),
                    MakeTimeChecker ())
     .AddAttribute ("RemoteAddress",
 					"The destination Address of the outbound packets",
 					AddressValue (),
-					MakeAddressAccessor (&PS::m_peerAddress),
+					MakeAddressAccessor (&Worker2::m_peerAddress),
 					MakeAddressChecker ())
     .AddAttribute ("RemotePort", "The destination port of the outbound packets",
                    UintegerValue (100),
-                   MakeUintegerAccessor (&PS::m_peerPort),
+                   MakeUintegerAccessor (&Worker2::m_peerPort),
                    MakeUintegerChecker<uint16_t> ())
 	.AddAttribute ("PriorityGroup", "The priority group of this flow",
 				   UintegerValue (0),
-				   MakeUintegerAccessor (&PS::m_pg),
+				   MakeUintegerAccessor (&Worker2::m_pg),
 				   MakeUintegerChecker<uint16_t> ())
     .AddAttribute ("PacketSize",
                    "Size of packets generated. The minimum packet size is 14 bytes which is the size of the header carrying the sequence number and the time stamp.",
                    UintegerValue (1024),
-                   MakeUintegerAccessor (&PS::m_size),
+                   MakeUintegerAccessor (&Worker2::m_size),
                    MakeUintegerChecker<uint32_t> (14,1500))
-    .AddAttribute ("PSID",
-                   "Parameter Server ID. One parameter server may have many parameter server process.",
+    .AddAttribute ("WorkerID",
+                   "Worker ID.",
                    UintegerValue (0),
-                   MakeUintegerAccessor (&PS::m_ps_id),
+                   MakeUintegerAccessor (&Worker2::m_worker_id),
                    MakeUintegerChecker<uint16_t> (0,65535))
-    .AddAttribute ("ToWorker",
-                   "The worker that this app sends to.",
+    .AddAttribute ("ToPS",
+                   "The PS that this app sends to.",
                    UintegerValue (0),
-                   MakeUintegerAccessor (&PS::m_worker_id),
+                   MakeUintegerAccessor (&Worker2::m_worker_id),
                    MakeUintegerChecker<uint16_t> (0,65535))
     .AddAttribute ("IndexOrder",
                    "IndexOrder.",
                    UintegerValue (0),
-                   MakeUintegerAccessor (&PS::m_index_order_address),
+                   MakeUintegerAccessor (&Worker2::m_index_order_address),
                    MakeUintegerChecker<uint64_t> (0, -1))
     .AddAttribute ("ParameterSizes",
                    "ParameterSizes.",
                    UintegerValue (0),
-                   MakeUintegerAccessor (&PS::m_parameter_sizes_address),
+                   MakeUintegerAccessor (&Worker2::m_parameter_sizes_address),
                    MakeUintegerChecker<uint64_t> (0, -1))
     .AddAttribute ("NumLayers",
                    "NumLayers",
                    UintegerValue (0),
-                   MakeUintegerAccessor (&PS::m_num_layers),
+                   MakeUintegerAccessor (&Worker2::m_num_layers),
                    MakeUintegerChecker<uint16_t> (0,65535))
     .AddAttribute ("NumServers",
                    "NumServers",
                    UintegerValue (0),
-                   MakeUintegerAccessor (&PS::m_num_servers),
+                   MakeUintegerAccessor (&Worker2::m_num_servers),
                    MakeUintegerChecker<uint16_t> (0,65535))
     .AddAttribute ("NumPriorities",
                    "NumPriorities",
                    UintegerValue (0),
-                   MakeUintegerAccessor (&PS::m_num_priorities),
+                   MakeUintegerAccessor (&Worker2::m_num_priorities),
                    MakeUintegerChecker<uint16_t> (0,65535))
   ;
   return tid;
 }
 
-PS::PS ()
+Worker2::Worker2 ()
 {
   NS_LOG_FUNCTION_NOARGS ();
   m_sent = 0;
@@ -122,41 +122,41 @@ PS::PS ()
   m_sendEvent = EventId ();
 }
 
-PS::~PS ()
+Worker2::~Worker2 ()
 {
   NS_LOG_FUNCTION_NOARGS ();
 }
 
 void
-PS::SetRemote (Ipv4Address ip, uint16_t port)
+Worker2::SetRemote (Ipv4Address ip, uint16_t port)
 {
   m_peerAddress = Address(ip);
   m_peerPort = port;
 }
 
 void
-PS::SetRemote (Ipv6Address ip, uint16_t port)
+Worker2::SetRemote (Ipv6Address ip, uint16_t port)
 {
   m_peerAddress = Address(ip);
   m_peerPort = port;
 }
 
 void
-PS::SetRemote (Address ip, uint16_t port)
+Worker2::SetRemote (Address ip, uint16_t port)
 {
   m_peerAddress = ip;
   m_peerPort = port;
 }
 
 void
-PS::DoDispose (void)
+Worker2::DoDispose (void)
 {
   NS_LOG_FUNCTION_NOARGS ();
   Application::DoDispose ();
 }
 
 void
-PS::GetParameters (void)
+Worker2::GetParameters (void)
 {
   uint32_t* tmp_addr = (uint32_t*) m_parameter_sizes_address;
   for (int k = 0; k < m_num_layers; k++) 
@@ -174,7 +174,7 @@ PS::GetParameters (void)
 }
 
 void
-PS::StartApplication (void)
+Worker2::StartApplication (void)
 {
   NS_LOG_FUNCTION_NOARGS ();
 
@@ -196,20 +196,20 @@ PS::StartApplication (void)
         }
     }
 
-  m_socket->SetRecvCallback (MakeCallback (&PS::Reset, this));
-  m_sendEvent = Simulator::Schedule (Seconds (0.0), &PS::Send, this);
+  m_socket->SetRecvCallback (MakeCallback (&Worker2::Reset, this));
+  m_sendEvent = Simulator::Schedule (Seconds (0.0), &Worker2::Send, this);
   m_allowed = m_count;
 }
 
 void
-PS::StopApplication ()
+Worker2::StopApplication ()
 {
   NS_LOG_FUNCTION_NOARGS ();
   Simulator::Cancel (m_sendEvent);
 }
 
 void
-PS::Send (void)
+Worker2::Send (void)
 {
   NS_LOG_FUNCTION_NOARGS ();
   NS_ASSERT (m_sendEvent.IsExpired ());
@@ -293,20 +293,20 @@ PS::Send (void)
   //Yibo: add jitter here to avoid unfairness!!!!!
   if (m_sent < m_allowed && m_sent_paras < m_index_order[0])
     {
-      m_sendEvent = Simulator::Schedule (Seconds(next_avail * UniformVariable(0.45,0.55).GetValue()), &PS::Send, this);
+      m_sendEvent = Simulator::Schedule (Seconds(next_avail * UniformVariable(0.45,0.55).GetValue()), &Worker2::Send, this);
     }
 
 }
 
 void 
-PS::SetPG (uint16_t pg)
+Worker2::SetPG (uint16_t pg)
 {
 	m_pg = pg;
 	return;
 }
 
 void
-PS::Reset(Ptr<Socket> socket)
+Worker2::Reset(Ptr<Socket> socket)
 {
 	m_allowed += m_count;
 	Send();

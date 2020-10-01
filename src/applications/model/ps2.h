@@ -20,8 +20,8 @@
  *
  */
 
-#ifndef WORKER_H
-#define WORKER_H
+#ifndef PS2_H
+#define PS2_H
 
 #include "ns3/application.h"
 #include "ns3/event-id.h"
@@ -35,19 +35,19 @@ namespace ns3 {
  */
 
 /**
- * \ingroup PSWorker
- * \class Worker
+ * \ingroup PSWorker2
+ * \class PS2
  * \brief A Udp server. Receives UDP packets from a remote host. UDP packets
  * carry a 32bits sequence number followed by a 64bits time stamp in their
  * payloads. The application uses, the sequence number to determine if a packet
  * is lost, and the time stamp to compute the delay
  */
-class Worker : public Application
+class PS2 : public Application
 {
 public:
   static TypeId GetTypeId (void);
-  Worker ();
-  virtual ~Worker ();
+  PS2 ();
+  virtual ~PS2 ();
   /**
    * returns the number of lost packets
    * \return the number of lost packets
@@ -96,7 +96,7 @@ private:
   Address m_peerAddress;
   uint16_t m_peerPort;
 
-  uint16_t m_worker_id;
+  uint16_t m_ps_id;
   uint64_t m_parameter_sizes_address;
   std::vector<uint32_t> m_parameter_sizes;
   uint64_t m_op_time_address;
@@ -112,4 +112,4 @@ private:
 
 } // namespace ns3
 
-#endif /* WORKER_H */
+#endif /* PS2_H */

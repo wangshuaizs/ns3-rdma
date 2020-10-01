@@ -84,7 +84,6 @@ private:
   virtual void StartApplication (void);
   virtual void StopApplication (void);
 
-  void Send (void);
   void HandleRead (Ptr<Socket> socket);
 
   uint16_t m_port;
@@ -92,18 +91,10 @@ private:
   Ptr<Socket> m_socket6;
   Address m_local;
   uint32_t m_received;
-  uint32_t m_sent;
-  uint64_t m_allowed;
-  uint16_t m_pg;
   PacketLossCounter m_lossCounter;
   
   Address m_peerAddress;
   uint16_t m_peerPort;
-
-
-  
-  Time m_interval;
-  EventId m_sendEvent;
 
   uint16_t m_worker_id;
   uint64_t m_parameter_sizes_address;

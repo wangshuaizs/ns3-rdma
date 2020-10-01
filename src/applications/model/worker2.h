@@ -20,8 +20,8 @@
  *
  */
 
-#ifndef PS_H
-#define PS_H
+#ifndef WORKER2_H
+#define WORKER2_H
 
 #include "ns3/application.h"
 #include "ns3/event-id.h"
@@ -36,20 +36,20 @@ class Packet;
 
 /**
  * \ingroup psworker
- * \class PS
+ * \class Worker2
  * \brief A parameter server. Sends UDP packet carrying sequence number and time stamp
  *  in their payloads
  *
  */
-class PS : public Application
+class Worker2 : public Application
 {
 public:
   static TypeId
   GetTypeId (void);
 
-  PS ();
+  Worker2 ();
 
-  virtual ~PS ();
+  virtual ~Worker2 ();
 
   /**
    * \brief set the remote address and port
@@ -102,4 +102,4 @@ private:
 
 } // namespace ns3
 
-#endif /* PS_H */
+#endif /* WORKER2_H */

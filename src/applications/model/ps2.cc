@@ -33,66 +33,66 @@
 #include "packet-loss-counter.h"
 
 #include "ns3/seq-ts-header.h"
-#include "worker.h"
+#include "ps2.h"
 
 namespace ns3 {
 
-NS_LOG_COMPONENT_DEFINE ("Worker");
-NS_OBJECT_ENSURE_REGISTERED (Worker);
+NS_LOG_COMPONENT_DEFINE ("PS2");
+NS_OBJECT_ENSURE_REGISTERED (PS2);
 
 
 TypeId
-Worker::GetTypeId (void)
+PS2::GetTypeId (void)
 {
-  static TypeId tid = TypeId ("ns3::Worker")
+  static TypeId tid = TypeId ("ns3::PS2")
     .SetParent<Application> ()
-    .AddConstructor<Worker> ()
+    .AddConstructor<PS2> ()
     .AddAttribute ("Port",
                    "Port on which we listen for incoming packets.",
                    UintegerValue (100),
-                   MakeUintegerAccessor (&Worker::m_port),
+                   MakeUintegerAccessor (&PS2::m_port),
                    MakeUintegerChecker<uint16_t> ())
     .AddAttribute ("PacketWindowSize",
                    "The size of the window used to compute the packet loss. This value should be a multiple of 8.",
                    UintegerValue (32),
-                   MakeUintegerAccessor (&Worker::GetPacketWindowSize,
-                                         &Worker::SetPacketWindowSize),
+                   MakeUintegerAccessor (&PS2::GetPacketWindowSize,
+                                         &PS2::SetPacketWindowSize),
                    MakeUintegerChecker<uint16_t> (8,256))
-    .AddAttribute ("WorkerID",
-                   "WorkerID.",
+    .AddAttribute ("PSID",
+                   "PSID.",
                    UintegerValue (0),
-                   MakeUintegerAccessor (&Worker::m_worker_id),
+                   MakeUintegerAccessor (&PS2::m_ps_id),
                    MakeUintegerChecker<uint16_t> (0,65535))
     .AddAttribute ("PacketSize",
                    "Size of packets received.",
                    UintegerValue (1024),
-                   MakeUintegerAccessor (&Worker::m_size),
+                   MakeUintegerAccessor (&PS2::m_size),
                    MakeUintegerChecker<uint32_t> (14,1500))
     .AddAttribute ("ParameterSizes",
                    "ParameterSizes.",
                    UintegerValue (0),
-                   MakeUintegerAccessor (&Worker::m_parameter_sizes_address),
+                   MakeUintegerAccessor (&PS2::m_parameter_sizes_address),
                    MakeUintegerChecker<uint64_t> (0, -1))
 	.AddAttribute("OperatorTimes",
 				  "OperatorTimes.",
 				  UintegerValue(0),
-				  MakeUintegerAccessor(&Worker::m_op_time_address),
+				  MakeUintegerAccessor(&PS2::m_op_time_address),
 				  MakeUintegerChecker<uint64_t>(0, -1))
     .AddAttribute ("NumLayers",
                    "NumLayers",
                    UintegerValue (0),
-                   MakeUintegerAccessor (&Worker::m_num_layers),
+                   MakeUintegerAccessor (&PS2::m_num_layers),
                    MakeUintegerChecker<uint16_t> (0,65535))
     .AddAttribute ("NumServers",
                    "NumServers",
                    UintegerValue (0),
-                   MakeUintegerAccessor (&Worker::m_num_servers),
+                   MakeUintegerAccessor (&PS2::m_num_servers),
                    MakeUintegerChecker<uint16_t> (0,65535))
   ;
   return tid;
 }
 
-Worker::Worker ()
+PS2::PS2 ()
   : m_lossCounter (0)
 {
   NS_LOG_FUNCTION (this);
@@ -100,31 +100,31 @@ Worker::Worker ()
   m_num_ready_paras = 0;
 }
 
-Worker::~Worker ()
+PS2::~PS2 ()
 {
   NS_LOG_FUNCTION (this);
 }
 
 uint16_t
-Worker::GetPacketWindowSize () const
+PS2::GetPacketWindowSize () const
 {
   return m_lossCounter.GetBitMapSize ();
 }
 
 void
-Worker::SetPacketWindowSize (uint16_t size)
+PS2::SetPacketWindowSize (uint16_t size)
 {
   m_lossCounter.SetBitMapSize (size);
 }
 
 uint32_t
-Worker::GetLost (void) const
+PS2::GetLost (void) const
 {
   return m_lossCounter.GetLost ();
 }
 
 uint32_t
-Worker::GetReceived (void) const
+PS2::GetReceived (void) const
 {
 
   return m_received;
@@ -132,14 +132,14 @@ Worker::GetReceived (void) const
 }
 
 void
-Worker::DoDispose (void)
+PS2::DoDispose (void)
 {
   NS_LOG_FUNCTION (this);
   Application::DoDispose ();
 }
 
 void
-Worker::GetParameters (void)
+PS2::GetParameters (void)
 {
   uint32_t* tmp_addr = (uint32_t*) m_parameter_sizes_address;
   for (int k = 0; k < m_num_layers; k++) {
@@ -166,7 +166,7 @@ Worker::GetParameters (void)
 }
 
 void
-Worker::StartApplication (void)
+PS2::StartApplication (void)
 {
   NS_LOG_FUNCTION (this);
 
@@ -181,7 +181,7 @@ Worker::StartApplication (void)
       m_socket->Bind (local);
     }
 
-  m_socket->SetRecvCallback (MakeCallback (&Worker::HandleRead, this));
+  m_socket->SetRecvCallback (MakeCallback (&PS2::HandleRead, this));
 
   if (m_socket6 == 0)
     {
@@ -192,12 +192,12 @@ Worker::StartApplication (void)
       m_socket6->Bind (local);
     }
 
-  m_socket6->SetRecvCallback (MakeCallback (&Worker::HandleRead, this));
+  m_socket6->SetRecvCallback (MakeCallback (&PS2::HandleRead, this));
 
 }
 
 void
-Worker::StopApplication ()
+PS2::StopApplication ()
 {
   NS_LOG_FUNCTION (this);
 
@@ -208,7 +208,7 @@ Worker::StopApplication ()
 }
 
 void
-Worker::HandleRead (Ptr<Socket> socket)
+PS2::HandleRead (Ptr<Socket> socket)
 {
   NS_LOG_FUNCTION (this << socket);
   Ptr<Packet> packet;
@@ -234,13 +234,13 @@ Worker::HandleRead (Ptr<Socket> socket)
               if (m_num_patitions[para_id] == m_partition_ready_bars[para_id]) {
                 m_para_ready_times[para_id] = Simulator::Now().GetMicroSeconds();
                 m_num_ready_paras++;
-                std::cout << "At " << Simulator::Now().GetMicroSeconds() << " us " << para_id << " @ " << m_worker_id << " is ready\n";
+                std::cout << "At " << Simulator::Now().GetMicroSeconds() << " us " << para_id << " @ " << m_ps_id << " is ready\n";
 
                 if (m_num_ready_paras == m_num_layers) { //All parameters have been recieved by now
                   uint64_t fp_processing_time = 0;
                   for (int i = 0; i < m_num_layers; i++) 
                     fp_processing_time = (fp_processing_time > m_para_ready_times[i] ? fp_processing_time : m_para_ready_times[i]) + m_op_times[i];
-                    std::cout << "worker " << m_worker_id << " finished FP at " << fp_processing_time << "us.\n";
+                    std::cout << "PS " << m_ps_id << " finished FP at " << fp_processing_time << "us.\n";
                 }
               }
             }
@@ -262,7 +262,7 @@ Worker::HandleRead (Ptr<Socket> socket)
 }
 
 void
-Worker::SetRemote (Ipv4Address ip, uint16_t port)
+PS2::SetRemote (Ipv4Address ip, uint16_t port)
 {
 	m_peerAddress = Address(ip);
 	m_peerPort = port;

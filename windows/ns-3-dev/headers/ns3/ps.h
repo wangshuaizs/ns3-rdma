@@ -72,7 +72,6 @@ private:
 
   void ScheduleTransmit (Time dt);
   void Send (void);
-  void HandleRead (Ptr<Socket> socket);
   void Reset (Ptr<Socket> socket);
 
   uint32_t m_count;
@@ -81,12 +80,10 @@ private:
   uint32_t m_size;
 
   uint32_t m_sent;
-  uint32_t m_received;
   Ptr<Socket> m_socket;
   Address m_peerAddress;
   uint16_t m_peerPort;
   EventId m_sendEvent;
-  PacketLossCounter m_lossCounter;
 
   uint16_t m_pg;
   uint16_t m_ps_id;

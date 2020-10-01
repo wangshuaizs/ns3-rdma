@@ -85,7 +85,7 @@ std::string rate_ai, rate_hai;
 bool clamp_target_rate = false, clamp_target_rate_after_timer = false, send_in_chunks = true, l2_wait_for_ack = false, l2_back_to_zero = false, l2_test_read = false;
 double error_rate_per_link = 0.0;
 NodeContainer n;
-#define SERVER_NUM 64
+#define SERVER_NUM 3
 #define LARYER_NUM 19
 #define PRIORITY_NUM 8
 #define USED_PRIORITY_NUM 2
@@ -120,7 +120,7 @@ void generate_global_random_send_order(void)
 	vector<int> indexs;
 	int para_count = 0;
 	for (auto& it : layer_paras) {
-		para_sizes[para_count] = ceil(it*1.0 / SERVER_NUM);
+		para_sizes[para_count] = ceil(it*1.0 / SERVER_NUM/10);
 		//std::cout << para_sizes[para_count] << " ";
 		indexs.push_back(para_count++);
 	}
