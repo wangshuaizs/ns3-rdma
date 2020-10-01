@@ -53,8 +53,9 @@ namespace ns3 {
 
 	BroadcomNode::BroadcomNode()
 	{
-		m_maxBufferBytes = 9000000; //9MB
+		m_maxBufferBytes = 4294967295; //max uint32_t //9000000; //9MB
 		m_usedTotalBytes = 0;
+		m_placeholder_for_safe_rw_maxBufferBytes = m_maxBufferBytes;
 
 		for (uint32_t i = 0; i < pCnt; i++)
 		{
