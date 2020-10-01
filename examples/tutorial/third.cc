@@ -88,11 +88,11 @@ NodeContainer n;
 #define SERVER_NUM 3
 #define LARYER_NUM 19
 #define PRIORITY_NUM 8
-#define USED_PRIORITY_NUM 1
+#define USED_PRIORITY_NUM 2
 #define USED_HIGHEST_PRIORITY 3
 #define port_num 4000
 bool used_port[SERVER_NUM][port_num] = { false };  //��1άΪpow(kkk,nnn),��2ά����Ϊnnn*nnn*(kkk-1)
-int pkt_num = 100000; //max = "4294967295";
+int pkt_num = 18717; //max = "4294967295";
 vector<uint32_t> layer_paras = { 7168, 147712, 295424, 590336, 1180672, 2360320, 2360320, 2360320, 4720640, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 411058176, 67125248, 16404388 };
 uint32_t para_sizes[LARYER_NUM];
 uint32_t global_recv_send_index_order[SERVER_NUM][SERVER_NUM][LARYER_NUM]; // recv/sender/para
@@ -229,7 +229,7 @@ int main(int argc, char *argv[])
 	flow_file = FLOW_PATH;
 	trace_file = TRACE_PATH;
 	trace_output_file = MIX_PATH;
-	app_start_time = 0.99;
+	app_start_time = 0.0;
 	app_stop_time = 10.01;
 	simulator_stop_time = 11.0;
 	send_in_chunks = 0;
@@ -477,7 +477,7 @@ int main(int argc, char *argv[])
 		Ptr<Ipv4> ipv4 = n.Get(dst)->GetObject<Ipv4>();
 		Ipv4Address serverAddress = ipv4->GetAddress(1, 0).GetLocal(); //GetAddress(0,0) is the loopback 127.0.0.1
 
-		PSHelper ps0(serverAddress, port, pg, (uint64_t)recv_send_index_order, (uint64_t)para_sizes); //Add Priority
+		PSHelper ps0(serverAddress, 5001, pg, (uint64_t)recv_send_index_order, (uint64_t)para_sizes); //Add Priority
 		//ps0.SetAttribute("PSID", UintegerValue(dst));
 		//ps0.SetAttribute("IndexOrder", UintegerValue((uint64_t)&recv_send_index_order));
 		//UdpClientHelper ps0(serverAddress, port, pg); //Add Priority
@@ -583,12 +583,13 @@ int one2one_traffic(string path, int server_num)
 
 	flowfile.open(path);
 	// output first line, flow #
-	flowfile << flow_num << endl;
+	flowfile << USED_PRIORITY_NUM *flow_num << endl;
 	for (int i = 0; i < server_num; i++)
 		for (int j = 0; j < server_num; j++)
 			if (i != j) {
-				//flowfile << i << " " << j << " " << "2" << " " << packet_num << " " << start_time << " " << end_time << std::endl;
-				flowfile << i << " " << j << " " << "3" << " " << packet_num << " " << start_time << " " << end_time << std::endl;
+				for (int k = 0; k < USED_PRIORITY_NUM; k++)
+					flowfile << i << " " << j << " " << std::to_string((USED_HIGHEST_PRIORITY-k)) << " " << packet_num << " " << start_time << " " << end_time << std::endl;
+				//flowfile << i << " " << j << " " << "3" << " " << packet_num << " " << start_time << " " << end_time << std::endl;
 			}
 	//flowfile << 2 << endl;
 	// output the rest line, src dst priority packet# start_time end_time
