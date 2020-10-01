@@ -240,7 +240,7 @@ Worker::HandleRead (Ptr<Socket> socket)
                   uint64_t fp_processing_time = 0;
                   for (int i = 0; i < m_num_layers; i++) 
                     fp_processing_time = (fp_processing_time > m_para_ready_times[i] ? fp_processing_time : m_para_ready_times[i]) + m_op_times[i];
-                    std::cout << "worker " << m_worker_id << " finished FP at " << fp_processing_time << "us.\n";
+                    std::cout << "worker " << m_worker_id << " finished FP at " << fp_processing_time << " us.\n";
                 }
               }
             }
