@@ -164,15 +164,15 @@ PS::GetParameters (void)
   for (int k = 0; k < m_num_layers; k++) 
     m_parameter_sizes.push_back(tmp_addr[k]);
   tmp_addr = (uint32_t*) m_index_order_address;
-  m_index_order = (uint32_t*)tmp_addr + (m_num_layers+1)*(m_pg+8*(m_ps_id+m_num_servers*m_worker_id)) + 1;
+  m_index_order = (uint32_t*)tmp_addr + (m_num_layers+1)*(m_pg+8*(m_ps_id+m_num_servers*m_worker_id));
 
-  std::cout << m_worker_id << " " << m_ps_id << " " << m_pg << "\n";
-  /*for (int k = 0; k < m_num_layers; k++) 
-    std::cout << m_parameter_sizes[k] << " ";
-  std::cout << "\n";*/
+  /*std::cout << m_worker_id << " " << m_ps_id << " " << m_pg << "\n";
   for (int k = 0; k < m_num_layers; k++) 
-    std::cout << m_index_order[k] << " ";
+    std::cout << m_parameter_sizes[k] << " ";
   std::cout << "\n";
+  for (int k = 0; k < m_num_layers+1; k++) 
+    std::cout << m_index_order[k] << " ";
+  std::cout << "\n";*/
 }
 
 void
@@ -250,14 +250,14 @@ PS::Send (void)
 	  SeqTsHeader seqTs;
 	  seqTs.SetSeq (m_sent);
 	  seqTs.SetPG (m_pg);
-    uint32_t para_index = m_index_order[m_sent_paras];
+    uint32_t para_index = m_index_order[m_sent_paras+1];
     seqTs.SetParaID(para_index);
     uint32_t this_send_size;
     if (m_parameter_sizes[para_index] > m_size)
       this_send_size = m_size;
     else {
       this_send_size = m_parameter_sizes[para_index];
-      std::cout << m_worker_id << " " << m_ps_id << " " << m_pg << " " << para_index << " " << m_sent+1 << " " << m_sent_paras+1 << "\n";
+      //std::cout << m_worker_id << " " << m_ps_id << " " << m_pg << " " << para_index << " " << m_sent+1 << " " << m_sent_paras+1 << "\n";
       m_sent_paras++;
     }
     //std::cout << "p " << m_worker_id << " " << m_ps_id << " " << m_pg << " " << para_index << " " << m_parameter_sizes[para_index] << "\n";
@@ -292,8 +292,10 @@ PS::Send (void)
 	  }
   }
 
+  if (m_sent_paras >= m_index_order[0])
+    m_socket->SetRecvCallback (MakeCallback (&PS::HandleRead, this));
   //Yibo: add jitter here to avoid unfairness!!!!!
-  if (m_sent < m_allowed)
+  if (m_sent < m_allowed && m_sent_paras < m_index_order[0])
     {
       m_sendEvent = Simulator::Schedule (Seconds(next_avail * UniformVariable(0.45,0.55).GetValue()), &PS::Send, this);
     }

@@ -138,9 +138,11 @@ void generate_random_send_order(void)
 	vector<int> indexs;
 	int para_count = 0;
 	for (auto& it : layer_paras) {
-		para_sizes[para_count] = it / SERVER_NUM;
+		para_sizes[para_count] = ceil(it*1.0 / SERVER_NUM / 10);
+		std::cout << para_sizes[para_count] << " ";
 		indexs.push_back(para_count++);
 	}
+	std::cout << "\n";
 
 	for (int i = 0; i < SERVER_NUM; i++)
 		for (int j = 0; j < USED_PRIORITY_NUM - 1; j++)
