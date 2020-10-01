@@ -73,6 +73,11 @@ Worker::GetTypeId (void)
                    UintegerValue (0),
                    MakeUintegerAccessor (&Worker::m_parameter_sizes_address),
                    MakeUintegerChecker<uint64_t> (0, -1))
+	.AddAttribute("OperatorTimes",
+				  "OperatorTimes.",
+				  UintegerValue(0),
+				  MakeUintegerAccessor(&Worker::m_op_time_address),
+				  MakeUintegerChecker<uint64_t>(0, -1))
     .AddAttribute ("NumLayers",
                    "NumLayers",
                    UintegerValue (0),
@@ -93,6 +98,7 @@ Worker::Worker ()
   NS_LOG_FUNCTION (this);
   m_sent = 0;
   m_received=0;
+  m_num_ready_paras = 0;
 }
 
 Worker::~Worker ()
@@ -142,7 +148,16 @@ Worker::GetParameters (void)
     m_partition_ready_bars.push_back(ceil(tmp_addr[k]*1.0/m_size)*(m_num_servers-1));
   }
   m_num_patitions.resize(m_num_layers);
-  /*(for (int k = 0; k < m_num_layers; k++) 
+
+  tmp_addr = (uint32_t*)m_op_time_address;
+  for (int k = 0; k < m_num_layers; k++) {
+	  m_op_times.push_back(tmp_addr[k]);
+  }
+  m_para_ready_times.resize(m_num_layers);
+  /*for (int k = 0; k < m_num_layers; k++)
+	  std::cout << m_op_times[k] << " ";
+  std::cout << "\n";
+  for (int k = 0; k < m_num_layers; k++)
     std::cout << m_parameter_sizes[k] << " ";
   std::cout << "\n";
 
@@ -294,14 +309,19 @@ Worker::HandleRead (Ptr<Socket> socket)
                            " Delay: " << Simulator::Now () - seqTs.GetTs ());
               uint32_t para_id = seqTs.GetParaID();
               m_num_patitions[para_id]++;
-              if (m_num_patitions[para_id] >= m_partition_ready_bars[para_id]) {
-                if (m_num_patitions[para_id] > m_partition_ready_bars[para_id])
-                  std::cout << "> " << para_id << " " << m_num_patitions[para_id] << " " << m_partition_ready_bars[para_id] << "\n";
-                else
-                {
-                  std::cout << para_id << " @ " << m_worker_id << " is ready\n";
-                }
-                
+              if (m_num_patitions[para_id] == m_partition_ready_bars[para_id]) {
+				  m_para_ready_times[para_id] = Simulator::Now().GetMicroSeconds();
+				  m_num_ready_paras++;
+				std::cout << "At " << Simulator::Now().GetMicroSeconds() << " us " << para_id << " @ " << m_worker_id << " is ready\n";
+
+				if (m_num_ready_paras == m_num_layers) { //All parameters have been recieved by now
+					uint64_t fp_processing_time = 0;
+					for (int i = 0; i < m_num_layers; i++) {
+						fp_processing_time = (fp_processing_time > m_para_ready_times[i] ? fp_processing_time : m_para_ready_times[i]) + m_op_times[i];
+					}
+					std::cout << "worker " << m_worker_id << " finished FP at " << fp_processing_time << "us.\n";
+
+				}
               }
             }
           else if (Inet6SocketAddress::IsMatchingType (from))

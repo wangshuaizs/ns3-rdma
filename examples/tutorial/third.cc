@@ -90,10 +90,14 @@ NodeContainer n;
 #define PRIORITY_NUM 8
 #define USED_PRIORITY_NUM 2
 #define USED_HIGHEST_PRIORITY 3
-#define port_num 4000
-bool used_port[SERVER_NUM][port_num] = { false };  //��1άΪpow(kkk,nnn),��2ά����Ϊnnn*nnn*(kkk-1)
-int pkt_num = 18717; //max = "4294967295";
+int pkt_num = 4294967295; // 18717; //max = "4294967295";
+
+// vector<uint32_t> layer_paras : unit Bytes
+// vector<uint32_t> op_times : unit us
+// VGG19
 vector<uint32_t> layer_paras = { 7168, 147712, 295424, 590336, 1180672, 2360320, 2360320, 2360320, 4720640, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 411058176, 67125248, 16404388 };
+uint32_t op_times[] = { 30319, 91665, 39119, 53470, 26756, 42353, 42394, 42367, 24336, 39367, 39365, 39363, 13403, 13374, 13378, 13374, 10459, 1634, 634};
+
 uint32_t para_sizes[LARYER_NUM];
 uint32_t global_recv_send_index_order[SERVER_NUM][SERVER_NUM][LARYER_NUM]; // recv/sender/para
 uint32_t recv_send_index_order[SERVER_NUM][SERVER_NUM][PRIORITY_NUM][LARYER_NUM+1]; // recv/sender/pg/para
@@ -230,8 +234,8 @@ int main(int argc, char *argv[])
 	trace_file = TRACE_PATH;
 	trace_output_file = MIX_PATH;
 	app_start_time = 0.0;
-	app_stop_time = 10.01;
-	simulator_stop_time = 11.0;
+	app_stop_time = 10.0;
+	simulator_stop_time = 10.0;
 	send_in_chunks = 0;
 	enable_qcn = 0;
 	use_dynamic_pfc_threshold = 1;
@@ -461,6 +465,7 @@ int main(int argc, char *argv[])
 		worker0.SetAttribute("NumLayers", UintegerValue(LARYER_NUM));
 		worker0.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
 		worker0.SetAttribute("ParameterSizes", UintegerValue((uint64_t)para_sizes));
+		worker0.SetAttribute("OperatorTimes", UintegerValue((uint64_t)op_times));
 		//UdpServerHelper worker0(port);
 		ApplicationContainer apps0s = worker0.Install(n.Get(i));
 		apps0s.Start(Seconds(app_start_time));
@@ -470,9 +475,6 @@ int main(int argc, char *argv[])
 		uint32_t src, dst, pg, maxPacketCount, port;
 		double start_time, stop_time;
 		flowf >> src >> dst >> pg >> maxPacketCount >> start_time >> stop_time;
-		while (used_port[dst][port = int(UniformVariable(0, 1).GetValue() * (port_num - 1)) + 1])
-			continue;
-		used_port[dst][port] = true;
 		NS_ASSERT(n.Get(src)->GetNodeType() == 0 && n.Get(dst)->GetNodeType() == 0);
 		Ptr<Ipv4> ipv4 = n.Get(dst)->GetObject<Ipv4>();
 		Ipv4Address serverAddress = ipv4->GetAddress(1, 0).GetLocal(); //GetAddress(0,0) is the loopback 127.0.0.1
@@ -578,7 +580,7 @@ int one2one_traffic(string path, int server_num)
 	int flow_num = server_num * (server_num - 1);
 	string priority = "2";
 	int packet_num = pkt_num; //max = "4294967295";
-	string start_time = "1.0";
+	string start_time = "0.0";
 	string end_time = "10.0";
 
 	flowfile.open(path);

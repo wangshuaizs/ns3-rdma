@@ -108,11 +108,15 @@ private:
   uint16_t m_worker_id;
   uint64_t m_parameter_sizes_address;
   std::vector<uint32_t> m_parameter_sizes;
+  uint64_t m_op_time_address;
+  std::vector<uint32_t> m_op_times;
   uint16_t m_num_layers;
   uint16_t m_num_servers;
   uint32_t m_size;
   std::vector<uint32_t> m_partition_ready_bars;
   std::vector<uint32_t> m_num_patitions;
+  std::vector<uint64_t> m_para_ready_times;
+  uint32_t  m_num_ready_paras;
 };
 
 } // namespace ns3
