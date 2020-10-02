@@ -88,9 +88,9 @@ double error_rate_per_link = 0.0;
 #define SERVER_NUM 3
 #define LARYER_NUM 19
 #define PRIORITY_NUM 8
-#define USED_PRIORITY_NUM 2
+#define USED_PRIORITY_NUM 1
 #define USED_HIGHEST_PRIORITY 3
-#define FP 0 // 0 enable, 0 disable
+#define FP 1 // 0 enable, 0 disable
 #define BP 1 // 1 enable, 0 disable
 uint32_t pkt_num = 4294967295; // 18717; //max = "4294967295";
 
@@ -101,6 +101,7 @@ uint32_t pkt_num = 4294967295; // 18717; //max = "4294967295";
 vector<uint32_t> layer_paras = { 7168, 147712, 295424, 590336, 1180672, 2360320, 2360320, 2360320, 4720640, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 411058176, 67125248, 16404388 };
 uint32_t fp_op_times[] = { 30319, 91665, 39119, 53470, 26756, 42353, 42394, 42367, 24336, 39367, 39365, 39363, 13403, 13374, 13378, 13374, 10459, 1634, 634 };
 uint32_t bp_op_times[] = { 1009, 3484, 19417, 29017, 28993, 28980, 28988, 81598, 81604, 81632, 48154, 112614, 112692, 112531, 64181, 132969, 81337, 187261, 17848 };
+uint64_t fp_finish_times[SERVER_NUM], bp_finish_times[SERVER_NUM]; // must uint64_t
 
 uint32_t para_sizes[LARYER_NUM];
 uint32_t global_recv_send_index_order[SERVER_NUM][SERVER_NUM][LARYER_NUM]; // recv/sender/para
@@ -128,7 +129,7 @@ void generate_global_random_send_order(void)
 	vector<int> indexs;
 	int para_count = 0;
 	for (auto& it : layer_paras) {
-		para_sizes[para_count] = ceil(it*1.0 / SERVER_NUM/10);
+		para_sizes[para_count] = ceil(it*1.0 / SERVER_NUM);
 		//std::cout << para_sizes[para_count] << " ";
 		indexs.push_back(para_count++);
 	}
@@ -136,9 +137,8 @@ void generate_global_random_send_order(void)
 
 	for (int i = 0; i < SERVER_NUM; i++) {
 		for (int j = 0; j < SERVER_NUM; j++) {
-			//unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-			//shuffle(indexs.begin(), indexs.end(), std::default_random_engine(seed));
-			unsigned seed = (i + 3)*(j + 7);
+			unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+			//unsigned seed = (i + 3)*(j + 7);
 			shuffle(indexs.begin(), indexs.end(), std::default_random_engine(seed));
 
 			int k = 0;
@@ -168,7 +168,7 @@ void read_random_send_order(void)
 
 	int para_count = 0;
 	for (auto& it : layer_paras)
-		para_sizes[para_count++] = ceil(it*1.0 / SERVER_NUM/10);
+		para_sizes[para_count++] = ceil(it*1.0 / SERVER_NUM);
 
 	for (int i = 0; i < SERVER_NUM; i++) {
 		for (int j = 0; j < SERVER_NUM; j++) {
@@ -229,7 +229,7 @@ void read_bp_send_order(void)
 
 	int para_count = 0;
 	for (auto& it : layer_paras)
-		para_sizes[para_count++] = ceil(it*1.0 / SERVER_NUM/10);
+		para_sizes[para_count++] = ceil(it*1.0 / SERVER_NUM);
 
 	for (int i = 0; i < SERVER_NUM; i++) {
 		for (int j = 0; j < SERVER_NUM; j++) {
@@ -393,6 +393,7 @@ double RunningFP (void)
 		worker0.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
 		worker0.SetAttribute("ParameterSizes", UintegerValue((uint64_t)para_sizes));
 		worker0.SetAttribute("OperatorTimes", UintegerValue((uint64_t)fp_op_times));
+		worker0.SetAttribute("FPFinishTimes", UintegerValue((uint64_t)fp_finish_times));
 		//UdpServerHelper worker0(port);
 		ApplicationContainer apps0s = worker0.Install(n.Get(i));
 		apps0s.Start(Seconds(app_start_time));
@@ -551,6 +552,7 @@ double RunningBP (void)
 		ps1.SetAttribute("NumLayers", UintegerValue(LARYER_NUM));
 		ps1.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
 		ps1.SetAttribute("ParameterSizes", UintegerValue((uint64_t)para_sizes));
+		ps1.SetAttribute("BPFinishTimes", UintegerValue((uint64_t)bp_finish_times));
 		//UdpServerHelper worker0(port);
 		ApplicationContainer apps1s = ps1.Install(n.Get(i));
 		apps1s.Start(Seconds(app_start_time));
@@ -574,6 +576,7 @@ double RunningBP (void)
 		worker1.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
 		worker1.SetAttribute("NumPriorities", UintegerValue(USED_PRIORITY_NUM));
 		worker1.SetAttribute("OperatorTimes", UintegerValue((uint64_t)bp_op_times));
+		worker1.SetAttribute("FPFinishTimes", UintegerValue((uint64_t)fp_finish_times));
 		ApplicationContainer apps1c = worker1.Install(n.Get(src));
 
 		apps1c.Start(Seconds(start_time));
@@ -739,8 +742,16 @@ int main(int argc, char *argv[])
 	double t_fp = 0, t_bp = 0;
 	if (FP != 0)
 		t_fp = RunningFP();
+	std::cout << "-------------- FP Finish Times (us) ------------------\n";
+	for (int i = 0; i <SERVER_NUM; i++)
+		std::cout << fp_finish_times[i] << " ";
+	std::cout << "\n------------------------------------------------------\n";
 	if (BP != 0)
 		t_bp = RunningBP();
+	std::cout << "-------------- BP Finish Times (us) ------------------\n";
+	for (int i = 0; i <SERVER_NUM; i++)
+		std::cout << bp_finish_times[i] << " ";
+	std::cout << "\n------------------------------------------------------\n";
 	std::cout << "Simulation Done! cost " << t_fp+t_bp << " s.\n";
 }
 
@@ -837,7 +848,7 @@ int one2one_traffic_bp(string path, int server_num)
 		for (int j = 0; j < server_num; j++)
 			if (i != j) {
 				for (int k = 0; k < USED_PRIORITY_NUM; k++)
-					flowfile << i << " " << j << " " << std::to_string((USED_HIGHEST_PRIORITY - k)) << " " << packet_num << " " << start_time << " " << end_time << std::endl;
+					flowfile << i << " " << j << " " << std::to_string((USED_HIGHEST_PRIORITY - k)) << " " << packet_num << " " << std::to_string(fp_finish_times[i]*1.0/1000000) << " " << end_time << std::endl;
 				//flowfile << i << " " << j << " " << "3" << " " << packet_num << " " << start_time << " " << end_time << std::endl;
 			}
 	//flowfile << 2 << endl;

@@ -114,6 +114,11 @@ Worker2::GetTypeId (void)
                   UintegerValue(0),
                   MakeUintegerAccessor(&Worker2::m_op_time_address),
                   MakeUintegerChecker<uint64_t>(0, -1))
+    .AddAttribute ("FPFinishTimes",
+                   "FPFinishTimes",
+                   UintegerValue (0),
+                   MakeUintegerAccessor (&Worker2::m_fp_finish_times_address),
+                   MakeUintegerChecker<uint64_t> (0,-1))
   ;
   return tid;
 }
@@ -175,6 +180,7 @@ Worker2::GetParameters (void)
   for (int k = m_num_layers-2; k >= 0; k--) {
 	  m_op_times[k] = m_op_times[k+1] + tmp_addr[m_num_layers-1-k];
   }
+  m_fp_finish_times = (uint64_t *)m_fp_finish_times_address;
   /*for (int k = 0; k < m_num_layers; k++) 
     std::cout << m_op_times[k] << " ";
   std::cout << "\n";
@@ -229,7 +235,7 @@ Worker2::Send (void)
   NS_LOG_FUNCTION_NOARGS ();
   NS_ASSERT (m_sendEvent.IsExpired ());
 
-  if (Simulator::Now().GetMicroSeconds() >= m_op_times[m_index_order[m_sent_paras+1]]) {
+  if (Simulator::Now().GetMicroSeconds()-m_fp_finish_times[m_worker_id] >= m_op_times[m_index_order[m_sent_paras+1]]) {
     //Yibo: optimize!!!
     Ptr<Node> node = GetNode();
     uint32_t dn = node->GetNDevices();
@@ -316,7 +322,7 @@ Worker2::Send (void)
   {
     if (m_sent < m_allowed && m_sent_paras < m_index_order[0])
       {
-        m_sendEvent = Simulator::Schedule (MicroSeconds(m_op_times[m_index_order[m_sent_paras+1]] - Simulator::Now().GetMicroSeconds()), &Worker2::Send, this);
+        m_sendEvent = Simulator::Schedule (MicroSeconds(m_op_times[m_index_order[m_sent_paras+1]] + m_fp_finish_times[m_worker_id] - Simulator::Now().GetMicroSeconds()), &Worker2::Send, this);
       }
   }
   

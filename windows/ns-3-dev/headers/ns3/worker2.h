@@ -94,6 +94,8 @@ private:
   std::vector<uint32_t> m_parameter_sizes;
   uint64_t m_op_time_address;
   std::vector<uint32_t> m_op_times;
+  uint64_t m_fp_finish_times_address;
+  uint64_t* m_fp_finish_times;
 
   uint16_t m_num_layers;
   uint16_t m_num_servers;

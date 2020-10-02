@@ -106,6 +106,8 @@ private:
   std::vector<uint32_t> m_num_patitions;
   std::vector<uint64_t> m_para_ready_times;
   uint32_t  m_num_ready_paras;
+  uint64_t m_bp_finish_times_address;
+  uint64_t* m_bp_finish_times;
 };
 
 } // namespace ns3

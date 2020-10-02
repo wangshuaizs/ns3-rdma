@@ -83,6 +83,11 @@ PS2::GetTypeId (void)
                    UintegerValue (0),
                    MakeUintegerAccessor (&PS2::m_num_servers),
                    MakeUintegerChecker<uint16_t> (0,65535))
+    .AddAttribute ("BPFinishTimes",
+                   "BPFinishTimes",
+                   UintegerValue (0),
+                   MakeUintegerAccessor (&PS2::m_bp_finish_times_address),
+                   MakeUintegerChecker<uint64_t> (0,-1))
   ;
   return tid;
 }
@@ -143,6 +148,7 @@ PS2::GetParameters (void)
   }
   m_num_patitions.resize(m_num_layers);
   m_para_ready_times.resize(m_num_layers);
+  m_bp_finish_times = (uint64_t *)m_bp_finish_times_address;
   /*for (int k = 0; k < m_num_layers; k++)
     std::cout << m_parameter_sizes[k] << " ";
   std::cout << "\n";
@@ -221,10 +227,12 @@ PS2::HandleRead (Ptr<Socket> socket)
               if (m_num_patitions[para_id] == m_partition_ready_bars[para_id]) {
                 m_para_ready_times[para_id] = Simulator::Now().GetMicroSeconds();
                 m_num_ready_paras++;
-                std::cout << "At " << Simulator::Now().GetMicroSeconds() << " us " << para_id << " @ " << m_ps_id << " has finished receving.\n";
+                if (m_ps_id == 0)
+                  std::cout << "At " << Simulator::Now().GetMicroSeconds() << " us " << para_id << " @ " << m_ps_id << " has finished receving.\n";
 
                 if (m_num_ready_paras == m_num_layers) { //All parameters have been recieved by now
-                    std::cout << "PS " << m_ps_id << " finished BP at " << Simulator::Now().GetMicroSeconds() << " us.\n";
+                    //std::cout << "PS " << m_ps_id << " finished BP at " << Simulator::Now().GetMicroSeconds() << " us.\n";
+                    *((uint64_t *)m_bp_finish_times_address + m_ps_id) = Simulator::Now().GetMicroSeconds();
                 }
               }
             }
