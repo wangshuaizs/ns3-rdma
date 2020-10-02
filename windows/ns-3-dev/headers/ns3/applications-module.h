@@ -32,4 +32,7 @@
 #include "ps.h"
 #include "worker.h"
 #include "ps-worker-helper.h"
+#include "ps2.h"
+#include "worker2.h"
+#include "ps-worker-helper2.h"
 #endif

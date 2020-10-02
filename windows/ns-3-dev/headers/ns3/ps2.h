@@ -96,11 +96,9 @@ private:
   Address m_peerAddress;
   uint16_t m_peerPort;
 
-  uint16_t m_ps_id;
+  uint32_t m_ps_id;
   uint64_t m_parameter_sizes_address;
   std::vector<uint32_t> m_parameter_sizes;
-  uint64_t m_op_time_address;
-  std::vector<uint32_t> m_op_times;
   uint16_t m_num_layers;
   uint16_t m_num_servers;
   uint32_t m_size;

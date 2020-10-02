@@ -95,10 +95,12 @@ double error_rate_per_link = 0.0;
 uint32_t pkt_num = 4294967295; // 18717; //max = "4294967295";
 
 // vector<uint32_t> layer_paras : unit Bytes
-// vector<uint32_t> op_times : unit us
+// vector<uint32_t> fp_op_times : unit us, from layer 0 to layer n-1
+// vector<uint32_t> bp_op_times : unit us, from layer n-1 to layer 0
 // VGG19
 vector<uint32_t> layer_paras = { 7168, 147712, 295424, 590336, 1180672, 2360320, 2360320, 2360320, 4720640, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 411058176, 67125248, 16404388 };
-uint32_t op_times[] = { 30319, 91665, 39119, 53470, 26756, 42353, 42394, 42367, 24336, 39367, 39365, 39363, 13403, 13374, 13378, 13374, 10459, 1634, 634 };
+uint32_t fp_op_times[] = { 30319, 91665, 39119, 53470, 26756, 42353, 42394, 42367, 24336, 39367, 39365, 39363, 13403, 13374, 13378, 13374, 10459, 1634, 634 };
+uint32_t bp_op_times[] = { 1009, 3484, 19417, 29017, 28993, 28980, 28988, 81598, 81604, 81632, 48154, 112614, 112692, 112531, 64181, 132969, 81337, 187261, 17848 };
 
 uint32_t para_sizes[LARYER_NUM];
 uint32_t global_recv_send_index_order[SERVER_NUM][SERVER_NUM][LARYER_NUM]; // recv/sender/para
@@ -220,6 +222,65 @@ void read_random_send_order(void)
 	priorityorderfile.close();
 }
 
+void read_bp_send_order(void)
+{
+	ofstream priorityorderfile;
+	priorityorderfile.open("mix/priority_bp_order_file.txt");
+
+	int para_count = 0;
+	for (auto& it : layer_paras)
+		para_sizes[para_count++] = ceil(it*1.0 / SERVER_NUM/10);
+
+	for (int i = 0; i < SERVER_NUM; i++) {
+		for (int j = 0; j < SERVER_NUM; j++) {
+			for (int layer_i = 0; layer_i < LARYER_NUM; layer_i++)
+				global_recv_send_index_order[i][j][layer_i] = LARYER_NUM-1 - layer_i;
+		}
+	}
+
+#if (USED_PRIORITY_NUM > 1)
+	uint32_t priority_thresholds[SERVER_NUM][USED_PRIORITY_NUM - 1];
+	for (int i = 0; i < SERVER_NUM; i++)
+		for (int j = 0; j < USED_PRIORITY_NUM - 1; j++)
+			priority_thresholds[i][j] = 8;
+	for (int i = 0; i < SERVER_NUM; i++)
+		for (int j = 0; j < SERVER_NUM; j++) {
+			recv_send_index_order[i][j][USED_HIGHEST_PRIORITY][0] = priority_thresholds[j][0] + 1;
+			for (int prio_i = 1; prio_i < USED_PRIORITY_NUM - 1; prio_i++) {
+				recv_send_index_order[i][j][USED_HIGHEST_PRIORITY - prio_i][0] = priority_thresholds[j][prio_i] - priority_thresholds[j][prio_i - 1];
+			}
+			recv_send_index_order[i][j][USED_HIGHEST_PRIORITY - USED_PRIORITY_NUM + 1][0] = LARYER_NUM - priority_thresholds[j][USED_PRIORITY_NUM - 2] - 1;
+
+			uint32_t para_cur = LARYER_NUM-1;
+			for (int prio_i = USED_HIGHEST_PRIORITY-USED_PRIORITY_NUM-1; prio_i <= USED_HIGHEST_PRIORITY; prio_i++) {
+				uint32_t para_count = 1;
+				for (int layer_i = 0; layer_i < recv_send_index_order[i][j][prio_i][0]; layer_i++) {
+					recv_send_index_order[i][j][prio_i][para_count] = para_cur;
+					para_count++;
+					para_cur--;
+				}
+			}
+			for (int prio_i = 0; prio_i < USED_PRIORITY_NUM; prio_i++) {
+				for (int layer_i = 0; layer_i < LARYER_NUM + 1; layer_i++)
+					priorityorderfile << recv_send_index_order[i][j][USED_HIGHEST_PRIORITY - USED_PRIORITY_NUM + 1 + prio_i][layer_i] << " ";
+				priorityorderfile << "\n";
+			}
+		}
+#else
+	for (int i = 0; i < SERVER_NUM; i++)
+		for (int j = 0; j < SERVER_NUM; j++) {
+			recv_send_index_order[i][j][USED_HIGHEST_PRIORITY][0] = LARYER_NUM;
+			for (int layer_i = 0; layer_i < LARYER_NUM; layer_i++)
+				recv_send_index_order[i][j][USED_HIGHEST_PRIORITY][layer_i + 1] = global_recv_send_index_order[i][j][layer_i];
+
+			for (int layer_i = 0; layer_i < LARYER_NUM + 1; layer_i++)
+				priorityorderfile << recv_send_index_order[i][j][USED_HIGHEST_PRIORITY][layer_i] << " ";
+			priorityorderfile << "\n";
+		}
+#endif
+	priorityorderfile.close();
+}
+
 double RunningFP (void) 
 {
 	NodeContainer n;
@@ -331,7 +392,7 @@ double RunningFP (void)
 		worker0.SetAttribute("NumLayers", UintegerValue(LARYER_NUM));
 		worker0.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
 		worker0.SetAttribute("ParameterSizes", UintegerValue((uint64_t)para_sizes));
-		worker0.SetAttribute("OperatorTimes", UintegerValue((uint64_t)op_times));
+		worker0.SetAttribute("OperatorTimes", UintegerValue((uint64_t)fp_op_times));
 		//UdpServerHelper worker0(port);
 		ApplicationContainer apps0s = worker0.Install(n.Get(i));
 		apps0s.Start(Seconds(app_start_time));
@@ -385,7 +446,7 @@ double RunningBP (void)
 	NodeContainer n;
 
 	one2one_traffic_bp(FLOW_PATH_BP, SERVER_NUM);
-	read_random_send_order(); //only needed when not running FP before
+	read_bp_send_order();
 
 	bool dynamicth = use_dynamic_pfc_threshold;
 
@@ -484,16 +545,15 @@ double RunningBP (void)
 
 	for (uint32_t i = 0; i < SERVER_NUM; i++)
 	{
-		WorkerHelper worker0(5001);
-		worker0.SetAttribute("WorkerID", UintegerValue(i));
-		worker0.SetAttribute("PacketSize", UintegerValue(packetSize));
-		worker0.SetAttribute("NumLayers", UintegerValue(LARYER_NUM));
-		worker0.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
-		worker0.SetAttribute("ParameterSizes", UintegerValue((uint64_t)para_sizes));
-		worker0.SetAttribute("OperatorTimes", UintegerValue((uint64_t)op_times));
+		PS2Helper ps1(5001);
+		ps1.SetAttribute("PSID", UintegerValue(i));
+		ps1.SetAttribute("PacketSize", UintegerValue(packetSize));
+		ps1.SetAttribute("NumLayers", UintegerValue(LARYER_NUM));
+		ps1.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
+		ps1.SetAttribute("ParameterSizes", UintegerValue((uint64_t)para_sizes));
 		//UdpServerHelper worker0(port);
-		ApplicationContainer apps0s = worker0.Install(n.Get(i));
-		apps0s.Start(Seconds(app_start_time));
+		ApplicationContainer apps1s = ps1.Install(n.Get(i));
+		apps1s.Start(Seconds(app_start_time));
 	}
 	for (uint32_t i = 0; i < flow_num; i++)
 	{
@@ -504,18 +564,19 @@ double RunningBP (void)
 		Ptr<Ipv4> ipv4 = n.Get(dst)->GetObject<Ipv4>();
 		Ipv4Address serverAddress = ipv4->GetAddress(1, 0).GetLocal(); //GetAddress(0,0) is the loopback 127.0.0.1
 
-		PSHelper ps0(serverAddress, 5001, pg, (uint64_t)recv_send_index_order, (uint64_t)para_sizes); //Add Priority
-		ps0.SetAttribute("MaxPackets", UintegerValue(maxPacketCount));
-		ps0.SetAttribute("Interval", TimeValue(interPacketInterval));
-		ps0.SetAttribute("PacketSize", UintegerValue(packetSize));
-		ps0.SetAttribute("PSID", UintegerValue(src));
-		ps0.SetAttribute("ToWorker", UintegerValue(dst));
-		ps0.SetAttribute("NumLayers", UintegerValue(LARYER_NUM));
-		ps0.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
-		ps0.SetAttribute("NumPriorities", UintegerValue(USED_PRIORITY_NUM));
-		ApplicationContainer apps0c = ps0.Install(n.Get(src));
+		Worker2Helper worker1(serverAddress, 5001, pg, (uint64_t)recv_send_index_order, (uint64_t)para_sizes); //Add Priority
+		worker1.SetAttribute("MaxPackets", UintegerValue(maxPacketCount));
+		worker1.SetAttribute("Interval", TimeValue(interPacketInterval));
+		worker1.SetAttribute("PacketSize", UintegerValue(packetSize));
+		worker1.SetAttribute("WorkerID", UintegerValue(src));
+		worker1.SetAttribute("ToPS", UintegerValue(dst));
+		worker1.SetAttribute("NumLayers", UintegerValue(LARYER_NUM));
+		worker1.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
+		worker1.SetAttribute("NumPriorities", UintegerValue(USED_PRIORITY_NUM));
+		worker1.SetAttribute("OperatorTimes", UintegerValue((uint64_t)bp_op_times));
+		ApplicationContainer apps1c = worker1.Install(n.Get(src));
 
-		apps0c.Start(Seconds(start_time));
+		apps1c.Start(Seconds(start_time));
 	}
 
 	std::cout << "Generate BP traffic complete.\n";

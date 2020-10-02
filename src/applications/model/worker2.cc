@@ -82,7 +82,7 @@ Worker2::GetTypeId (void)
     .AddAttribute ("ToPS",
                    "The PS that this app sends to.",
                    UintegerValue (0),
-                   MakeUintegerAccessor (&Worker2::m_worker_id),
+                   MakeUintegerAccessor (&Worker2::m_ps_id),
                    MakeUintegerChecker<uint16_t> (0,65535))
     .AddAttribute ("IndexOrder",
                    "IndexOrder.",
@@ -109,6 +109,11 @@ Worker2::GetTypeId (void)
                    UintegerValue (0),
                    MakeUintegerAccessor (&Worker2::m_num_priorities),
                    MakeUintegerChecker<uint16_t> (0,65535))
+    .AddAttribute("OperatorTimes",
+                  "BP OperatorTimes.",
+                  UintegerValue(0),
+                  MakeUintegerAccessor(&Worker2::m_op_time_address),
+                  MakeUintegerChecker<uint64_t>(0, -1))
   ;
   return tid;
 }
@@ -164,10 +169,20 @@ Worker2::GetParameters (void)
   tmp_addr = (uint32_t*) m_index_order_address;
   m_index_order = (uint32_t*)tmp_addr + (m_num_layers+1)*(m_pg+8*(m_ps_id+m_num_servers*m_worker_id));
 
-  /*std::cout << m_worker_id << " " << m_ps_id << " " << m_pg << "\n";
+  tmp_addr = (uint32_t*)m_op_time_address;
+  m_op_times.resize(m_num_layers);
+  m_op_times[m_num_layers-1] = tmp_addr[0];
+  for (int k = m_num_layers-2; k >= 0; k--) {
+	  m_op_times[k] = m_op_times[k+1] + tmp_addr[m_num_layers-1-k];
+  }
+  /*for (int k = 0; k < m_num_layers; k++) 
+    std::cout << m_op_times[k] << " ";
+  std::cout << "\n";
+  std::cout << m_worker_id << " " << m_ps_id << " " << m_pg << "\n";
   for (int k = 0; k < m_num_layers; k++) 
     std::cout << m_parameter_sizes[k] << " ";
   std::cout << "\n";
+  std::cout << m_pg << "\n";
   for (int k = 0; k < m_num_layers+1; k++) 
     std::cout << m_index_order[k] << " ";
   std::cout << "\n";*/
@@ -214,88 +229,97 @@ Worker2::Send (void)
   NS_LOG_FUNCTION_NOARGS ();
   NS_ASSERT (m_sendEvent.IsExpired ());
 
-  //Yibo: optimize!!!
-  Ptr<Node> node = GetNode();
-  uint32_t dn = node->GetNDevices();
-  double next_avail=10;
-  bool found=false;
+  if (Simulator::Now().GetMicroSeconds() >= m_op_times[m_index_order[m_sent_paras+1]]) {
+    //Yibo: optimize!!!
+    Ptr<Node> node = GetNode();
+    uint32_t dn = node->GetNDevices();
+    double next_avail=10;
+    bool found=false;
 
-  for (uint32_t i=0;i<dn;i++)
-  {
-	  Ptr<NetDevice> d = node->GetDevice(i);
-	  uint32_t localp=m_socket->GetLocalPort();
-	  
-	  //std::cout<<localp<<"\n";
-	  uint32_t buffer = d->GetUsedBuffer(localp,m_pg);
-	  double tmp = (buffer*8.0-1500*8.0)/40/1000000000*0.95; //0.95 is for conservative. assuming 40Gbps link.
-	  if (tmp<next_avail && tmp>0)
-	  {
-		  next_avail = tmp;
-		  found = true;
-	  }
-	      //std::cout<<tmp<<"\n";
+    for (uint32_t i=0;i<dn;i++)
+    {
+      Ptr<NetDevice> d = node->GetDevice(i);
+      uint32_t localp=m_socket->GetLocalPort();
+      
+      //std::cout<<localp<<"\n";
+      uint32_t buffer = d->GetUsedBuffer(localp,m_pg);
+      double tmp = (buffer*8.0-1500*8.0)/40/1000000000*0.95; //0.95 is for conservative. assuming 40Gbps link.
+      if (tmp<next_avail && tmp>0)
+      {
+        next_avail = tmp;
+        found = true;
+      }
+          //std::cout<<tmp<<"\n";
+    }
+    if (!found)
+    {
+      next_avail=0;
+    }
+    
+    next_avail = next_avail>m_interval.GetSeconds()?next_avail:m_interval.GetSeconds();
+    //next_avail = m_interval.GetSeconds();
+
+    if (next_avail < 0.000005)
+    {
+      SeqTsHeader seqTs;
+      seqTs.SetSeq (m_sent);
+      seqTs.SetPG (m_pg);
+      uint32_t para_index = m_index_order[m_sent_paras+1];
+      seqTs.SetParaID(para_index);
+      uint32_t this_send_size;
+      if (m_parameter_sizes[para_index] > m_size)
+        this_send_size = m_size;
+      else {
+        this_send_size = m_parameter_sizes[para_index];
+        //std::cout << m_worker_id << " " << m_ps_id << " " << m_pg << " " << para_index << " " << m_sent+1 << " " << m_sent_paras+1 << "\n";
+        m_sent_paras++;
+      }
+      //std::cout << "p " << Simulator::Now().GetMicroSeconds() << " " << m_worker_id << " " << m_ps_id << " " << m_pg << " " << para_index << " " << m_parameter_sizes[para_index] << "\n";
+      m_parameter_sizes[para_index] -= this_send_size;
+      this_send_size = this_send_size < 16 ? 16 : this_send_size;
+      Ptr<Packet> p = Create<Packet> (this_send_size - 16); // 16 : the size of the seqTs header
+      p->AddHeader (seqTs);
+
+      std::stringstream peerAddressStringStream;
+      if (Ipv4Address::IsMatchingType (m_peerAddress))
+      {
+        peerAddressStringStream << Ipv4Address::ConvertFrom (m_peerAddress);
+      }
+      else if (Ipv6Address::IsMatchingType (m_peerAddress))
+      {
+        peerAddressStringStream << Ipv6Address::ConvertFrom (m_peerAddress);
+      }
+
+      if ((m_socket->Send (p)) >= 0)
+      {
+        ++m_sent;
+        NS_LOG_INFO ("TraceDelay TX " << m_size << " bytes to "
+          << peerAddressStringStream.str () << " Uid: "
+          << p->GetUid () << " Time: "
+          << (Simulator::Now ()).GetSeconds ());
+
+      }
+      else
+      {
+        NS_LOG_INFO ("Error while sending " << m_size << " bytes to "
+          << peerAddressStringStream.str ());
+      }
+    }
+
+    //Yibo: add jitter here to avoid unfairness!!!!!
+    if (m_sent < m_allowed && m_sent_paras < m_index_order[0])
+      {
+        m_sendEvent = Simulator::Schedule (Seconds(next_avail * UniformVariable(0.45,0.55).GetValue()), &Worker2::Send, this);
+      }
   }
-  if (!found)
+  else
   {
-	  next_avail=0;
+    if (m_sent < m_allowed && m_sent_paras < m_index_order[0])
+      {
+        m_sendEvent = Simulator::Schedule (MicroSeconds(m_op_times[m_index_order[m_sent_paras+1]] - Simulator::Now().GetMicroSeconds()), &Worker2::Send, this);
+      }
   }
   
-  next_avail = next_avail>m_interval.GetSeconds()?next_avail:m_interval.GetSeconds();
-  //next_avail = m_interval.GetSeconds();
-
-  if (next_avail < 0.000005)
-  {
-	  SeqTsHeader seqTs;
-	  seqTs.SetSeq (m_sent);
-	  seqTs.SetPG (m_pg);
-    uint32_t para_index = m_index_order[m_sent_paras+1];
-    seqTs.SetParaID(para_index);
-    uint32_t this_send_size;
-    if (m_parameter_sizes[para_index] > m_size)
-      this_send_size = m_size;
-    else {
-      this_send_size = m_parameter_sizes[para_index];
-      //std::cout << m_worker_id << " " << m_ps_id << " " << m_pg << " " << para_index << " " << m_sent+1 << " " << m_sent_paras+1 << "\n";
-      m_sent_paras++;
-    }
-    //std::cout << "p " << m_worker_id << " " << m_ps_id << " " << m_pg << " " << para_index << " " << m_parameter_sizes[para_index] << "\n";
-    m_parameter_sizes[para_index] -= this_send_size;
-    this_send_size = this_send_size < 16 ? 16 : this_send_size;
-	  Ptr<Packet> p = Create<Packet> (this_send_size - 16); // 16 : the size of the seqTs header
-    p->AddHeader (seqTs);
-
-	  std::stringstream peerAddressStringStream;
-	  if (Ipv4Address::IsMatchingType (m_peerAddress))
-	  {
-		  peerAddressStringStream << Ipv4Address::ConvertFrom (m_peerAddress);
-	  }
-	  else if (Ipv6Address::IsMatchingType (m_peerAddress))
-	  {
-		  peerAddressStringStream << Ipv6Address::ConvertFrom (m_peerAddress);
-	  }
-
-	  if ((m_socket->Send (p)) >= 0)
-	  {
-		  ++m_sent;
-		  NS_LOG_INFO ("TraceDelay TX " << m_size << " bytes to "
-			  << peerAddressStringStream.str () << " Uid: "
-			  << p->GetUid () << " Time: "
-			  << (Simulator::Now ()).GetSeconds ());
-
-	  }
-	  else
-	  {
-		  NS_LOG_INFO ("Error while sending " << m_size << " bytes to "
-			  << peerAddressStringStream.str ());
-	  }
-  }
-
-  //Yibo: add jitter here to avoid unfairness!!!!!
-  if (m_sent < m_allowed && m_sent_paras < m_index_order[0])
-    {
-      m_sendEvent = Simulator::Schedule (Seconds(next_avail * UniformVariable(0.45,0.55).GetValue()), &Worker2::Send, this);
-    }
-
 }
 
 void 
