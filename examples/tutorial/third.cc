@@ -85,22 +85,24 @@ std::string rate_ai, rate_hai;
 bool clamp_target_rate = false, clamp_target_rate_after_timer = false, send_in_chunks = true, l2_wait_for_ack = false, l2_back_to_zero = false, l2_test_read = false;
 double error_rate_per_link = 0.0;
 
-#define SERVER_NUM 3
+#define SERVER_NUM 64
 #define LARYER_NUM 19
 #define PRIORITY_NUM 8
-#define USED_PRIORITY_NUM 1
+#define USED_PRIORITY_NUM 2
 #define USED_HIGHEST_PRIORITY 3
 #define FP 1 // 0 enable, 0 disable
 #define BP 1 // 1 enable, 0 disable
 uint32_t pkt_num = 4294967295; // 18717; //max = "4294967295";
 
 // vector<uint32_t> layer_paras : unit Bytes
-// vector<uint32_t> fp_op_times : unit us, from layer 0 to layer n-1
-// vector<uint32_t> bp_op_times : unit us, from layer n-1 to layer 0
+// vector<uint32_t> fp_op_times1 : unit us, from layer 0 to layer n-1
+// vector<uint32_t> bp_op_times1 : unit us, from layer n-1 to layer 0
 // VGG19
 vector<uint32_t> layer_paras = { 7168, 147712, 295424, 590336, 1180672, 2360320, 2360320, 2360320, 4720640, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 9439232, 411058176, 67125248, 16404388 };
-uint32_t fp_op_times[] = { 30319, 91665, 39119, 53470, 26756, 42353, 42394, 42367, 24336, 39367, 39365, 39363, 13403, 13374, 13378, 13374, 10459, 1634, 634 };
-uint32_t bp_op_times[] = { 1009, 3484, 19417, 29017, 28993, 28980, 28988, 81598, 81604, 81632, 48154, 112614, 112692, 112531, 64181, 132969, 81337, 187261, 17848 };
+uint32_t fp_op_times1[] = { 30319, 91665, 39119, 53470, 26756, 42353, 42394, 42367, 24336, 39367, 39365, 39363, 13403, 13374, 13378, 13374, 10459, 1634, 634 };
+uint32_t bp_op_times1[] = { 1009, 3484, 19417, 29017, 28993, 28980, 28988, 81598, 81604, 81632, 48154, 112614, 112692, 112531, 64181, 132969, 81337, 187261, 17848 };
+uint32_t fp_op_times2[] = { 24256, 73332, 31296, 42776, 21405, 33883, 33916, 33894, 19469, 31494, 31492, 31491, 10723, 10700, 10703, 10700, 8368, 1308, 508 };
+uint32_t bp_op_times2[] = { 808, 2788, 15534, 23214, 23195, 23184, 23191, 65279, 65284, 65306, 38524, 90092, 90154, 90025, 51345, 106376, 65070, 149809, 14279 };
 uint64_t fp_finish_times[SERVER_NUM], bp_finish_times[SERVER_NUM]; // must uint64_t
 
 uint32_t para_sizes[LARYER_NUM];
@@ -161,10 +163,11 @@ void generate_global_random_send_order(void)
 
 void read_random_send_order(void)
 {
-	ifstream orderfile;
+	ifstream orderfile, prioritymatrixfile;
 	ofstream priorityorderfile;
 	orderfile.open(order_filepath.c_str());
 	priorityorderfile.open("mix/priority_order_file.txt");
+	prioritymatrixfile.open("mix/priority_matrix.txt");
 
 	int para_count = 0;
 	for (auto& it : layer_paras)
@@ -181,7 +184,7 @@ void read_random_send_order(void)
 	uint32_t priority_thresholds[SERVER_NUM][USED_PRIORITY_NUM - 1];
 	for (int i = 0; i < SERVER_NUM; i++)
 		for (int j = 0; j < USED_PRIORITY_NUM - 1; j++)
-			priority_thresholds[i][j] = 8;
+			prioritymatrixfile >> priority_thresholds[i][j];
 	for (int i = 0; i < SERVER_NUM; i++)
 		for (int j = 0; j < SERVER_NUM; j++) {
 			recv_send_index_order[i][j][USED_HIGHEST_PRIORITY][0] = priority_thresholds[j][0] + 1;
@@ -220,12 +223,15 @@ void read_random_send_order(void)
 #endif
 	orderfile.close();
 	priorityorderfile.close();
+	prioritymatrixfile.close();
 }
 
 void read_bp_send_order(void)
 {
 	ofstream priorityorderfile;
+	ifstream prioritymatrixfile;
 	priorityorderfile.open("mix/priority_bp_order_file.txt");
+	prioritymatrixfile.open("mix/priority_matrix.txt");
 
 	int para_count = 0;
 	for (auto& it : layer_paras)
@@ -242,7 +248,7 @@ void read_bp_send_order(void)
 	uint32_t priority_thresholds[SERVER_NUM][USED_PRIORITY_NUM - 1];
 	for (int i = 0; i < SERVER_NUM; i++)
 		for (int j = 0; j < USED_PRIORITY_NUM - 1; j++)
-			priority_thresholds[i][j] = 8;
+			prioritymatrixfile >> priority_thresholds[i][j];
 	for (int i = 0; i < SERVER_NUM; i++)
 		for (int j = 0; j < SERVER_NUM; j++) {
 			recv_send_index_order[i][j][USED_HIGHEST_PRIORITY][0] = priority_thresholds[j][0] + 1;
@@ -279,6 +285,7 @@ void read_bp_send_order(void)
 		}
 #endif
 	priorityorderfile.close();
+	prioritymatrixfile.close();
 }
 
 double RunningFP (void) 
@@ -392,7 +399,10 @@ double RunningFP (void)
 		worker0.SetAttribute("NumLayers", UintegerValue(LARYER_NUM));
 		worker0.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
 		worker0.SetAttribute("ParameterSizes", UintegerValue((uint64_t)para_sizes));
-		worker0.SetAttribute("OperatorTimes", UintegerValue((uint64_t)fp_op_times));
+		if (0 <= i < SERVER_NUM*0.5)
+			worker0.SetAttribute("OperatorTimes", UintegerValue((uint64_t)fp_op_times1));
+		else if (SERVER_NUM*0.5 <= i < SERVER_NUM*1.0)
+			worker0.SetAttribute("OperatorTimes", UintegerValue((uint64_t)fp_op_times2));
 		worker0.SetAttribute("FPFinishTimes", UintegerValue((uint64_t)fp_finish_times));
 		//UdpServerHelper worker0(port);
 		ApplicationContainer apps0s = worker0.Install(n.Get(i));
@@ -575,7 +585,10 @@ double RunningBP (void)
 		worker1.SetAttribute("NumLayers", UintegerValue(LARYER_NUM));
 		worker1.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
 		worker1.SetAttribute("NumPriorities", UintegerValue(USED_PRIORITY_NUM));
-		worker1.SetAttribute("OperatorTimes", UintegerValue((uint64_t)bp_op_times));
+		if (0 <= i < SERVER_NUM*0.5)
+			worker1.SetAttribute("OperatorTimes", UintegerValue((uint64_t)bp_op_times1));
+		else if (SERVER_NUM*0.5 <= i < SERVER_NUM*1.0)
+			worker1.SetAttribute("OperatorTimes", UintegerValue((uint64_t)bp_op_times2));
 		worker1.SetAttribute("FPFinishTimes", UintegerValue((uint64_t)fp_finish_times));
 		ApplicationContainer apps1c = worker1.Install(n.Get(src));
 
