@@ -376,13 +376,11 @@ double RunningFP (void)
 		tracef >> nid;
 		trace_nodes = NodeContainer(trace_nodes, n.Get(nid));
 	}
-	NodeContainer trace_nodes2;
-	for (uint32_t i = 0; i < 3; i++)
-	{
-		trace_nodes2 = NodeContainer(trace_nodes2, n.Get(i));
-	}
 	AsciiTraceHelper ascii;
 	qbb.EnableAscii(ascii.CreateFileStream(trace_fp_out_file), trace_nodes);
+	NodeContainer trace_nodes2;
+	trace_nodes2 = NodeContainer(trace_nodes2, n.Get(0));
+	trace_nodes2 = NodeContainer(trace_nodes2, n.Get(SERVER_NUM - 1));
 	qbb.EnablePcap(fp_pcap_file, trace_nodes2, true);
 
 	Ipv4GlobalRoutingHelper::PopulateRoutingTables();
@@ -399,9 +397,9 @@ double RunningFP (void)
 		worker0.SetAttribute("NumLayers", UintegerValue(LARYER_NUM));
 		worker0.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
 		worker0.SetAttribute("ParameterSizes", UintegerValue((uint64_t)para_sizes));
-		if (i >= 0 && i < SERVER_NUM*0.5)
+		if (i >= 0 && i < SERVER_NUM*0.75)
 			worker0.SetAttribute("OperatorTimes", UintegerValue((uint64_t)fp_op_times1));
-		else if (i >= SERVER_NUM*0.5 && i <= SERVER_NUM*1.0) //<= SERVER_NUM*1.0 for prevent precesion bug
+		else if (i >= SERVER_NUM*0.75 && i <= SERVER_NUM*1.0) //<= SERVER_NUM*1.0 for prevent precesion bug
 			worker0.SetAttribute("OperatorTimes", UintegerValue((uint64_t)fp_op_times2));
 		worker0.SetAttribute("FPFinishTimes", UintegerValue((uint64_t)fp_finish_times));
 		//UdpServerHelper worker0(port);
@@ -539,13 +537,11 @@ double RunningBP (void)
 		tracef >> nid;
 		trace_nodes = NodeContainer(trace_nodes, n.Get(nid));
 	}
-	NodeContainer trace_nodes2;
-	for (uint32_t i = 0; i < 3; i++)
-	{
-		trace_nodes2 = NodeContainer(trace_nodes2, n.Get(i));
-	}
 	AsciiTraceHelper ascii;
 	qbb.EnableAscii(ascii.CreateFileStream(trace_bp_out_file), trace_nodes);
+	NodeContainer trace_nodes2;
+	trace_nodes2 = NodeContainer(trace_nodes2, n.Get(0));
+	trace_nodes2 = NodeContainer(trace_nodes2, n.Get(SERVER_NUM - 1));
 	qbb.EnablePcap(bp_pcap_file, trace_nodes2, true);
 
 	Ipv4GlobalRoutingHelper::PopulateRoutingTables();
@@ -585,9 +581,9 @@ double RunningBP (void)
 		worker1.SetAttribute("NumLayers", UintegerValue(LARYER_NUM));
 		worker1.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
 		worker1.SetAttribute("NumPriorities", UintegerValue(USED_PRIORITY_NUM));
-		if (src >= 0 && src < SERVER_NUM*0.5)
+		if (src >= 0 && src < SERVER_NUM*0.75)
 			worker1.SetAttribute("OperatorTimes", UintegerValue((uint64_t)bp_op_times1));
-		else if (src >= SERVER_NUM*0.5 && src <= SERVER_NUM*1.0) //<= SERVER_NUM*1.0 for prevent precesion bug
+		else if (src >= SERVER_NUM*0.75 && src <= SERVER_NUM*1.0) //<= SERVER_NUM*1.0 for prevent precesion bug
 			worker1.SetAttribute("OperatorTimes", UintegerValue((uint64_t)bp_op_times2));
 		worker1.SetAttribute("FPFinishTimes", UintegerValue((uint64_t)fp_finish_times));
 		ApplicationContainer apps1c = worker1.Install(n.Get(src));
