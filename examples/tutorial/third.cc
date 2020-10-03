@@ -399,9 +399,9 @@ double RunningFP (void)
 		worker0.SetAttribute("NumLayers", UintegerValue(LARYER_NUM));
 		worker0.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
 		worker0.SetAttribute("ParameterSizes", UintegerValue((uint64_t)para_sizes));
-		if (0 <= i < SERVER_NUM*0.5)
+		if (i >= 0 && i < SERVER_NUM*0.5)
 			worker0.SetAttribute("OperatorTimes", UintegerValue((uint64_t)fp_op_times1));
-		else if (SERVER_NUM*0.5 <= i < SERVER_NUM*1.0)
+		else if (i >= SERVER_NUM*0.5 && i <= SERVER_NUM*1.0) //<= SERVER_NUM*1.0 for prevent precesion bug
 			worker0.SetAttribute("OperatorTimes", UintegerValue((uint64_t)fp_op_times2));
 		worker0.SetAttribute("FPFinishTimes", UintegerValue((uint64_t)fp_finish_times));
 		//UdpServerHelper worker0(port);
@@ -585,9 +585,9 @@ double RunningBP (void)
 		worker1.SetAttribute("NumLayers", UintegerValue(LARYER_NUM));
 		worker1.SetAttribute("NumServers", UintegerValue(SERVER_NUM));
 		worker1.SetAttribute("NumPriorities", UintegerValue(USED_PRIORITY_NUM));
-		if (0 <= i < SERVER_NUM*0.5)
+		if (src >= 0 && src < SERVER_NUM*0.5)
 			worker1.SetAttribute("OperatorTimes", UintegerValue((uint64_t)bp_op_times1));
-		else if (SERVER_NUM*0.5 <= i < SERVER_NUM*1.0)
+		else if (src >= SERVER_NUM*0.5 && src <= SERVER_NUM*1.0) //<= SERVER_NUM*1.0 for prevent precesion bug
 			worker1.SetAttribute("OperatorTimes", UintegerValue((uint64_t)bp_op_times2));
 		worker1.SetAttribute("FPFinishTimes", UintegerValue((uint64_t)fp_finish_times));
 		ApplicationContainer apps1c = worker1.Install(n.Get(src));

@@ -240,14 +240,14 @@ Worker::HandleRead (Ptr<Socket> socket)
                 m_para_ready_times[para_id] = Simulator::Now().GetMicroSeconds();
                 m_num_ready_paras++;
                 if (m_worker_id == 0)
-                  std::cout << "At " << Simulator::Now().GetMicroSeconds() << " us " << para_id << " @ " << m_worker_id << " is ready\n";
+                 std::cout << "At " << Simulator::Now().GetMicroSeconds() << " us " << para_id << " @ " << m_worker_id << " is ready\n";
 
                 if (m_num_ready_paras == m_num_layers) { //All parameters have been recieved by now
                   uint64_t fp_processing_time = 0;
-                  for (int i = 0; i < m_num_layers; i++) 
-                    fp_processing_time = (fp_processing_time > m_para_ready_times[i] ? fp_processing_time : m_para_ready_times[i]) + m_op_times[i];
-                    //std::cout << "worker " << m_worker_id << " finished FP at " << fp_processing_time << " us.\n";
-                    *((uint64_t *)m_fp_finish_times_address + m_worker_id) = fp_processing_time;
+				  for (int i = 0; i < m_num_layers; i++) 
+					 fp_processing_time = (fp_processing_time > m_para_ready_times[i] ? fp_processing_time : m_para_ready_times[i]) + m_op_times[i];
+				//std::cout << "worker " << m_worker_id << " finished FP at " << fp_processing_time << " us.\n";
+				*((uint64_t *)m_fp_finish_times_address + m_worker_id) = fp_processing_time;
                 }
               }
             }
