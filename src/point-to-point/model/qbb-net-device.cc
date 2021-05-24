@@ -46,7 +46,6 @@
 #include "ns3/seq-ts-header.h"
 
 #include <iostream>
-#include <iomanip>
 
 NS_LOG_COMPONENT_DEFINE("QbbNetDevice");
 
