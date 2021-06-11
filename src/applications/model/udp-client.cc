@@ -171,7 +171,7 @@ UdpClient::Send (void)
 	  
 	  //std::cout<<localp<<"\n";
 	  uint32_t buffer = d->GetUsedBuffer(localp,m_pg);
-	  double tmp = (buffer*8.0-1500*8.0)/40/1000000000*0.95; //0.95 is for conservative. assuming 40Gbps link.
+	  double tmp = (buffer*8.0-1500*8.0)/200/1000000000*0.95; //0.95 is for conservative. assuming 200Gbps link.
 	  if (tmp<next_avail && tmp>0)
 	  {
 		  next_avail = tmp;
@@ -187,7 +187,7 @@ UdpClient::Send (void)
   next_avail = next_avail>m_interval.GetSeconds()?next_avail:m_interval.GetSeconds();
   //next_avail = m_interval.GetSeconds();
 
-  if (next_avail < 0.000005)
+  if (next_avail < 0.0000005)
   {
 	  SeqTsHeader seqTs;
 	  seqTs.SetSeq (m_sent);
